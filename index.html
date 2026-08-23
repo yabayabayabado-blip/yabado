@@ -825,11 +825,11 @@ function foreignYears(){
   return [...new Set(foreignDates.map(d=>Number(d.slice(0,4))))].sort((a,b)=>a-b);
 }
 
-function jumpToMonthKey(monthKey){
+function jumpToForeignMonth(monthKey){
   if(!monthKey) return;
-  const [y,m]=monthKey.split("-").map(Number);
-  calendarYear=y;
-  calendarMonth=m-1;
+  const parts=monthKey.split("-").map(Number);
+  calendarYear=parts[0];
+  calendarMonth=parts[1]-1;
   renderCalendar();
   positionSidebarForCalendar();
 }
@@ -842,22 +842,15 @@ function moveForeignMonth(direction){
   let idx=months.indexOf(current);
 
   if(idx<0){
-    // 若目前月份不在清單內，找最近方向上的月份
-    if(direction>0){
-      idx=months.findIndex(m=>m>current);
-      if(idx<0) idx=months.length;
-      idx-=1;
-    }else{
-      idx=months.length-1;
-      for(let i=months.length-1;i>=0;i--){
-        if(months[i]<current){ idx=i+1; break; }
-      }
-    }
+    // 找目前年月在出國月份清單中的插入位置
+    idx=months.findIndex(m=>m>current);
+    if(idx<0) idx=months.length;
+    idx = direction>0 ? idx-1 : idx;
   }
 
   const nextIdx=idx+direction;
   if(nextIdx<0 || nextIdx>=months.length) return;
-  jumpToMonthKey(months[nextIdx]);
+  jumpToForeignMonth(months[nextIdx]);
 }
 
 function moveForeignYear(direction){
@@ -865,18 +858,10 @@ function moveForeignYear(direction){
   if(!years.length) return;
 
   let idx=years.indexOf(calendarYear);
-
   if(idx<0){
-    if(direction>0){
-      idx=years.findIndex(y=>y>calendarYear);
-      if(idx<0) idx=years.length;
-      idx-=1;
-    }else{
-      idx=years.length-1;
-      for(let i=years.length-1;i>=0;i--){
-        if(years[i]<calendarYear){ idx=i+1; break; }
-      }
-    }
+    idx=years.findIndex(y=>y>calendarYear);
+    if(idx<0) idx=years.length;
+    idx = direction>0 ? idx-1 : idx;
   }
 
   const nextIdx=idx+direction;
@@ -886,19 +871,8 @@ function moveForeignYear(direction){
   const months=foreignMonthKeys().filter(m=>Number(m.slice(0,4))===targetYear);
   if(!months.length) return;
 
-  // 優先跳到該年度最接近目前月份的有資料月份
-  const currentMonth=calendarMonth+1;
-  let best=months[0];
-  let bestDiff=Infinity;
-  for(const mk of months){
-    const mm=Number(mk.slice(5,7));
-    const diff=Math.abs(mm-currentMonth);
-    if(diff<bestDiff){
-      bestDiff=diff;
-      best=mk;
-    }
-  }
-  jumpToMonthKey(best);
+  // 跳到該年第一個有出國紀錄的月份
+  jumpToForeignMonth(months[0]);
 }
 
 // ---------- Date index / calendar ----------
@@ -1055,7 +1029,7 @@ $("nextYear").onclick=()=>{
   }
   calendarYear++;
   renderCalendar();
-};renderCalendar()};
+};
 
 prevDataDay.onclick=()=>{
   const list=activeDateList();
@@ -1087,12 +1061,11 @@ travelFilterBtn.onclick=()=>{
       return;
     }
 
-    // 開啟時一律跳到所有出國日中最早的一天所在月份，
-    // 並直接選取最早出國日。
+    // 開啟出國日後，一律跳到最早的出國日
     const earliest=foreignDates[0];
-    const d=new Date(earliest+"T00:00:00");
-    calendarYear=d.getFullYear();
-    calendarMonth=d.getMonth();
+    const parts=earliest.split("-").map(Number);
+    calendarYear=parts[0];
+    calendarMonth=parts[1]-1;
     selectDate(earliest,false);
     renderCalendar();
     updateDayNav();
@@ -1100,11 +1073,12 @@ travelFilterBtn.onclick=()=>{
     return;
   }
 
-  // 關閉後維持目前選取日期，但恢復一般月份導航。
+  // 關閉後恢復一般月份/年份瀏覽
   renderCalendar();
   updateDayNav();
   positionSidebarForCalendar();
 };
+
 
 // ---------- Map ----------
 function lon2x(lon,z){return(lon+180)/360*Math.pow(2,z)*TILE}
