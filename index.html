@@ -2021,20 +2021,25 @@ function syncAnimationDate(item){
 
 function shouldBridgeMissingRoute(fromCoord,toCoord,item){
   if(!fromCoord || !toCoord) return false;
-  // 同一條實際 route 內部本身已有連線，不再重複補線。
-  if(item.kind==="route" && animationCurrentRouteKey===item.routeKey && animationCurrentLine && animationCurrentLine.length) return false;
+
+  // 同一條實際 route 的連續座標本身就已經相連，不重複補線。
+  if(item.kind==="route" && animationCurrentRouteKey===item.routeKey && animationCurrentLine && animationCurrentLine.length){
+    return false;
+  }
+
   const km=haversineKm(fromCoord,toCoord);
-  if(km<80) return false;
+  if(km<0.01) return false; // 幾乎同一位置，不必再畫重疊線。
 
-  const fromTaiwan=isTaiwanCoordinate(Number(fromCoord[1]),Number(fromCoord[0]));
-  const toTaiwan=isTaiwanCoordinate(Number(toCoord[1]),Number(toCoord[0]));
+  const currentDate=item.date||"";
+  const crossedDay=Boolean(animationLastDate && currentDate && animationLastDate!==currentDate);
 
-  // 臺灣 ↔ 國外：無論距離，若中間沒有 route 都直接補線。
-  if(fromTaiwan!==toTaiwan) return true;
+  // 跨天一定補線：前一天最後有效位置 → 下一天第一個有效位置。
+  // 即使中間缺一天、數天或完全沒有 route，也維持整段歷史軌跡連續。
+  if(crossedDay) return true;
 
-  // 國外不同區域或長距離跳點：視為缺少飛行／移動紀錄，補一直線。
-  // 800 km 可涵蓋多數跨國飛行，同時避免一般市區移動被誤補。
-  return km>=800;
+  // 同一天只要離開上一條實際 route／點位後仍有空隙，也補上銜接線。
+  // 這樣從最早一筆到最後一筆在視覺上永遠不會斷線。
+  return true;
 }
 
 function bridgeMissingRoute(fromCoord,toCoord){
@@ -2055,14 +2060,14 @@ function bridgeMissingRoute(fromCoord,toCoord){
 function consumeAnimationItem(item){
   const previousCoord=animationLastCoord ? [animationLastCoord[0],animationLastCoord[1]] : null;
 
-  // 若跨國／回臺途中沒有任何時間軸路線，直接以兩個有效定位點補一條紅色直線。
+  // 只要上一個有效位置與下一筆資料之間沒有同一條實際 route 連接，就自動補紅線；跨天也一律相連。
   if(previousCoord && shouldBridgeMissingRoute(previousCoord,item.coord,item)){
     bridgeMissingRoute(previousCoord,item.coord);
   }
 
   if(item.kind==="route"){
     // 以真正的 route feature 分段，不再因為跨海距離大就把航線切斷。
-    // 若 JSON 本身有 route 就依 route 畫；若跨國缺 route，會由前後有效定位點自動補直線。
+    // 若 JSON 本身有 route 就依 route 畫；route 之間、跨天或缺資料區段則由前後有效定位點自動補直線。
     if(!animationCurrentLine || animationCurrentRouteKey!==item.routeKey){
       if(animationCurrentLine && animationCurrentLine.length>=2) animationDrawnLines.push(animationCurrentLine);
       animationCurrentLine=[item.coord];
