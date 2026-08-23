@@ -265,6 +265,9 @@ button{cursor:pointer}
 .animbar button.primary{font-weight:800;border-color:#8ab4f8;background:#f5f9ff;color:#174ea6}
 .animbar button:disabled{opacity:.45;cursor:not-allowed}
 .animbar label{font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center}
+.speed-slider-label{min-width:250px}
+.speed-slider-label input[type=range]{width:170px;accent-color:var(--accent)}
+.speed-value{min-width:42px;text-align:right;font-weight:800;color:#174ea6;font-variant-numeric:tabular-nums}
 .anim-progress{display:grid;grid-template-columns:auto minmax(140px,1fr) auto;gap:8px;align-items:center;width:100%;font-size:12px;color:var(--muted)}
 .anim-progress input[type=range]{width:100%}
 .anim-now{font-weight:800;color:#374151;white-space:nowrap}
@@ -439,16 +442,9 @@ body.capture-clean .mapStatus{bottom:28px}
       <label id="tripSelectLabel" style="display:none">旅程
         <select id="tripSelect" disabled></select>
       </label>
-      <label>速度
-        <select id="animationSpeed">
-          <option value="0.5">0.5×</option>
-          <option value="1" selected>1×</option>
-          <option value="2">2×</option>
-          <option value="5">5×</option>
-          <option value="10">10×</option>
-          <option value="50">50×</option>
-          <option value="100">100×</option>
-        </select>
+      <label class="speed-slider-label">速度
+        <input id="animationSpeed" type="range" min="0" max="13" step="1" value="1" aria-label="動畫播放速度">
+        <span id="animationSpeedValue" class="speed-value">1×</span>
       </label>
       <label><input id="animationFollow" type="checkbox" checked> 自動跟隨</label>
       <div class="anim-progress">
@@ -577,6 +573,7 @@ const animationScope = $("animationScope");
 const tripSelectLabel = $("tripSelectLabel");
 const tripSelect = $("tripSelect");
 const animationSpeed = $("animationSpeed");
+const animationSpeedValue = $("animationSpeedValue");
 const animationFollow = $("animationFollow");
 const animationProgress = $("animationProgress");
 const animationStartLabel = $("animationStartLabel");
@@ -1799,6 +1796,19 @@ showRaw.onchange=()=>{if(selectedDate) renderSelectedDate()};
 window.addEventListener("resize",()=>{if(selectedDate) renderMap()});
 
 // ---------- History animation helpers ----------
+const ANIMATION_SPEED_LEVELS=[0.5,1,2,5,10,20,30,40,50,60,70,80,90,100];
+function getAnimationSpeed(){
+  const idx=Math.max(0,Math.min(ANIMATION_SPEED_LEVELS.length-1,Number(animationSpeed.value)||0));
+  return ANIMATION_SPEED_LEVELS[idx];
+}
+function updateAnimationSpeedLabel(){
+  const speed=getAnimationSpeed();
+  animationSpeedValue.textContent=`${speed}×`;
+  animationSpeed.setAttribute("aria-valuetext",`${speed} 倍速`);
+}
+animationSpeed.addEventListener("input",updateAnimationSpeedLabel);
+updateAnimationSpeedLabel();
+
 function featureSortTime(f){
   const p=f.properties||{};
   const v=p.start_time||p.end_time||p.time||p.timestamp||"";
@@ -1981,7 +1991,7 @@ function animationStep(ts){
   if(!animationLastTS) animationLastTS=ts;
   const dt=Math.min(100,ts-animationLastTS);
   animationLastTS=ts;
-  const speed=Number(animationSpeed.value)||1;
+  const speed=getAnimationSpeed();
   animationAccumulator += dt*speed;
 
   // 以畫面更新量推進資料；速度越高，每幀消化越多項目。
