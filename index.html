@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Google 時間軸網頁版</title>
+<style>
+:root{
+  --bg:#f4f6f8;
+  --panel:#ffffff;
+  --line:#dfe3e8;
+  --text:#202124;
+  --muted:#68707a;
+  --accent:#1a73e8;
+  --accent-soft:#e8f0fe;
+  --visit:#188038;
+  --route:#2563eb;
+  --start:#7c3aed;
+  --end:#d93025;
+  --raw:#6b7280;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font-family:"Microsoft JhengHei","Noto Sans TC",Arial,sans-serif;color:var(--text);background:var(--bg)}
+button,select,input{font:inherit}
+button{cursor:pointer}
+.app{
+  display:grid;
+  grid-template-columns:380px minmax(0,1fr);
+  height:100vh;
+  min-height:680px;
+}
+.sidebar{
+  background:var(--panel);
+  border-right:1px solid var(--line);
+  overflow:auto;
+  padding:16px;
+}
+.main{
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  padding:12px;
+}
+.title{
+  font-size:21px;
+  font-weight:800;
+  margin:0 0 4px;
+}
+.sub{
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
+  margin-bottom:12px;
+}
+.filebox{
+  border:1px solid var(--line);
+  background:#fafbfc;
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:12px;
+}
+.filebox input[type=file]{width:100%}
+.fileinfo{
+  margin-top:7px;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
+}
+.calendar{
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
+  background:#fff;
+}
+.cal-head{
+  display:grid;
+  grid-template-columns:38px 38px 1fr 38px 38px;
+  align-items:center;
+  gap:4px;
+  padding:10px;
+  border-bottom:1px solid var(--line);
+  background:#fafbfc;
+}
+.iconbtn{
+  height:34px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:#fff;
+  color:#374151;
+  font-weight:700;
+}
+.iconbtn:hover{background:#f1f5f9}
+.cal-title{
+  text-align:center;
+  font-weight:800;
+  font-size:16px;
+}
+.weekrow,.days{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+}
+.weekrow div{
+  text-align:center;
+  padding:8px 0;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+.day{
+  position:relative;
+  min-height:44px;
+  border:0;
+  border-top:1px solid #f3f4f6;
+  border-right:1px solid #f3f4f6;
+  background:#fff;
+  color:#9ca3af;
+  font-size:13px;
+}
+.day:nth-child(7n){border-right:0}
+.day.current-month{color:#6b7280}
+.day.has-data{
+  color:#1f2937;
+  font-weight:800;
+}
+.day.has-data::after{
+  content:"";
+  position:absolute;
+  inset:5px;
+  border:2px solid #8ab4f8;
+  border-radius:10px;
+  pointer-events:none;
+}
+.day.has-data:hover{background:#f6f9ff}
+.day.selected{
+  background:var(--accent);
+  color:#fff;
+}
+.day.selected::after{
+  border-color:var(--accent);
+}
+.day.today .num::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  bottom:5px;
+  width:4px;height:4px;
+  margin-left:-2px;
+  background:#34a853;
+  border-radius:50%;
+}
+.num{position:relative;z-index:1}
+.no-data-note{
+  padding:10px 12px;
+  border-top:1px solid var(--line);
+  color:var(--muted);
+  font-size:12px;
+  background:#fafbfc;
+}
+.daynav{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  gap:8px;
+  margin:10px 0 12px;
+}
+.daynav button{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:10px;
+  padding:9px 10px;
+  font-weight:700;
+}
+.daynav button:disabled{opacity:.4;cursor:not-allowed}
+.current-date{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-width:112px;
+  padding:0 6px;
+  font-size:13px;
+  font-weight:800;
+  color:#374151;
+}
+.switchline{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  margin:10px 0;
+  font-size:13px;
+}
+.switchline input{width:auto}
+.stats{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin:10px 0 12px;
+}
+.stat{
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:9px;
+  background:#fafafa;
+  font-size:13px;
+}
+.records-title{
+  font-weight:800;
+  font-size:13px;
+  margin:8px 0 4px;
+}
+.records{
+  border-top:1px solid #eee;
+}
+.record{
+  padding:9px 2px;
+  border-bottom:1px solid #eee;
+  cursor:pointer;
+}
+.record:hover{background:#fafafa}
+.record b{display:block;font-size:13px}
+.record span{display:block;margin-top:2px;color:var(--muted);font-size:12px}
+
+.toolbar{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-bottom:8px;
+}
+.toolbar button{
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:9px;
+  padding:8px 11px;
+}
+.toolbar button:hover{background:#f8fafc}.toolbar button#fitBtn{font-weight:700;border-color:#9bbcf5;background:#f5f9ff}
+.legend{
+  color:var(--muted);
+  font-size:12px;
+  margin-bottom:8px;
+}
+#mapWrap{
+  position:relative;
+  flex:1;
+  min-height:600px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  overflow:hidden;
+  background:#e9eef3;
+}
+#tiles,#mapCanvas{
+  position:absolute;
+  inset:0;
+}
+#tiles{overflow:hidden;background:#eef2f5}
+.tile{
+  position:absolute;
+  width:256px;
+  height:256px;
+  user-select:none;
+  pointer-events:none;
+}
+#mapCanvas{
+  width:100%;
+  height:100%;
+  touch-action:none;
+}
+.mapStatus{
+  position:absolute;
+  right:8px;
+  bottom:8px;
+  z-index:10;
+  padding:5px 8px;
+  border-radius:7px;
+  background:rgba(255,255,255,.94);
+  color:#5f6368;
+  font-size:11px;
+  box-shadow:0 1px 5px rgba(0,0,0,.12);
+}
+.popup{
+  position:absolute;
+  z-index:20;
+  display:none;
+  min-width:220px;
+  max-width:340px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(0,0,0,.2);
+  font-size:13px;
+  line-height:1.5;
+}
+.popup .close{
+  float:right;
+  border:0;
+  background:transparent;
+  padding:0;
+  font-size:18px;
+}
+.empty{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:100%;
+  color:#7b8490;
+  text-align:center;
+  padding:30px;
+  line-height:1.7;
+}
+@media(max-width:880px){
+  .app{grid-template-columns:1fr;height:auto}
+  .sidebar{border-right:0;border-bottom:1px solid var(--line)}
+  .main{height:680px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <h1 class="title">Google 時間軸網頁版</h1>
+    <div class="sub">直接選擇手機匯出的「時間軸.json」。瀏覽器通常會記住上次選檔資料夾；有資料的日期會在月曆上框選，點日期立即顯示當天路線。</div>
+
+    <div class="filebox">
+      <input id="fileInput" type="file" accept=".json,application/json">
+      <div id="fileInfo" class="fileinfo">尚未載入時間軸.json</div>
+    </div>
+
+    <div class="calendar">
+      <div class="cal-head">
+        <button id="prevYear" class="iconbtn" title="上一年">«</button>
+        <button id="prevMonth" class="iconbtn" title="上一月">‹</button>
+        <div id="calTitle" class="cal-title">—</div>
+        <button id="nextMonth" class="iconbtn" title="下一月">›</button>
+        <button id="nextYear" class="iconbtn" title="下一年">»</button>
+      </div>
+      <div class="weekrow">
+        <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+      </div>
+      <div id="days" class="days"></div>
+      <div class="no-data-note">藍框＝有時間軸資料；點選後立即切換地圖。</div>
+    </div>
+
+    <div class="daynav">
+      <button id="prevDataDay">← 上一個有資料日</button>
+      <div id="currentDate" class="current-date">尚未選擇</div>
+      <button id="nextDataDay">下一個有資料日 →</button>
+    </div>
+
+    <div class="switchline">
+      <input type="checkbox" id="showRaw" checked>
+      <label for="showRaw" style="margin:0;font-weight:400">顯示 rawSignals 原始定位點</label>
+    </div>
+
+    <div class="stats">
+      <div class="stat" id="statPoints">定位點：0</div>
+      <div class="stat" id="statRoutes">路線：0</div>
+      <div class="stat" id="statVisits">停留：0</div>
+      <div class="stat" id="statRaw">Raw：0</div>
+    </div>
+
+    <div class="records-title">當日紀錄</div>
+    <div id="records" class="records"></div>
+  </aside>
+
+  <main class="main">
+    <div class="toolbar">
+      <button id="fitBtn">縮放至當日全部路線</button>
+      <button id="zoomInBtn">放大</button>
+      <button id="zoomOutBtn">縮小</button>
+    </div>
+    <div class="legend">● 綠：停留　● 紫：起點　● 紅：終點　— 藍：移動路線</div>
+
+    <div id="mapWrap">
+      <div id="tiles"></div>
+      <canvas id="mapCanvas"></canvas>
+      <div id="popup" class="popup"></div>
+      <div id="mapStatus" class="mapStatus">請先載入時間軸.json</div>
+      <div id="empty" class="empty">請從左側選擇「時間軸.json」<br>資料不會上傳，全部在瀏覽器本機解析。</div>
+    </div>
+  </main>
+</div>
+
+<script>
+"use strict";
+
+const TILE = 256;
+const MIN_ZOOM = 7;
+const MAX_ZOOM = 15;
+const ONLINE_TILE = (z,x,y) =>
+  `https://wmts.nlsc.gov.tw/wmts/EMAP6_OPENDATA/default/GoogleMapsCompatible/${z}/${y}/${x}`;
+
+const $ = id => document.getElementById(id);
+
+const fileInput = $("fileInput");
+const fileInfo = $("fileInfo");
+const daysEl = $("days");
+const calTitle = $("calTitle");
+const currentDateEl = $("currentDate");
+const prevDataDay = $("prevDataDay");
+const nextDataDay = $("nextDataDay");
+const showRaw = $("showRaw");
+const recordsEl = $("records");
+const tilesEl = $("tiles");
+const canvas = $("mapCanvas");
+const ctx = canvas.getContext("2d");
+const mapWrap = $("mapWrap");
+const popup = $("popup");
+const mapStatus = $("mapStatus");
+const empty = $("empty");
+
+let allFeatures = [];
+let dateIndex = new Map();
+let dataDates = [];
+let selectedDate = null;
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth();
+
+let center = {lat:23.7,lng:120.9};
+let zoom = 8;
+let dragging = false;
+let dragStart = null;
+let hitPoints = [];
+let tileOK = 0;
+let tileBad = 0;
+
+// ---------- Timeline parser ----------
+function parseLatLng(value){
+  if(value == null) return null;
+
+  if(typeof value === "object" && !Array.isArray(value)){
+    if(value.latitudeE7 != null && value.longitudeE7 != null){
+      return [Number(value.latitudeE7)/1e7, Number(value.longitudeE7)/1e7];
+    }
+    if(value.latitude != null && value.longitude != null){
+      return [Number(value.latitude), Number(value.longitude)];
+    }
+    if(value.lat != null && (value.lng != null || value.lon != null)){
+      return [Number(value.lat), Number(value.lng ?? value.lon)];
+    }
+    for(const key of ["latLng","LatLng","location"]){
+      if(value[key] != null){
+        const found = parseLatLng(value[key]);
+        if(found) return found;
+      }
+    }
+  }
+
+  if(typeof value === "string"){
+    const s = value.replaceAll("°","").trim();
+    const m = s.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+    if(m) return [Number(m[1]),Number(m[2])];
+  }
+  return null;
+}
+
+function parseTime(value){
+  if(value == null || value === "") return "";
+  const s = String(value);
+  if(/^\d{12,}$/.test(s)){
+    const d = new Date(Number(s));
+    return isNaN(d) ? s : d.toISOString();
+  }
+  const d = new Date(s);
+  return isNaN(d) ? s : d.toISOString();
+}
+
+function offsetTime(start, minutes){
+  const d = new Date(start);
+  if(isNaN(d)) return parseTime(start);
+  d.setMinutes(d.getMinutes()+Number(minutes||0));
+  return d.toISOString();
+}
+
+function deepGet(obj,...keys){
+  let cur=obj;
+  for(const k of keys){
+    if(!cur || typeof cur!=="object") return null;
+    cur=cur[k];
+    if(cur==null) return null;
+  }
+  return cur;
+}
+
+function pointFeature(lat,lng,props){
+  return {type:"Feature",geometry:{type:"Point",coordinates:[lng,lat]},properties:props};
+}
+
+function lineFeature(points,props){
+  return {type:"Feature",geometry:{type:"LineString",coordinates:points.map(p=>[p.lng,p.lat])},properties:props};
+}
+
+function parseSemanticSegments(data){
+  const out=[];
+  const list=Array.isArray(data.semanticSegments)?data.semanticSegments:[];
+  list.forEach((seg,i)=>{
+    const st=parseTime(seg.startTime);
+    const et=parseTime(seg.endTime);
+
+    if(seg.visit && typeof seg.visit==="object"){
+      const cand=seg.visit.topCandidate||{};
+      const c=
+        parseLatLng(deepGet(cand,"placeLocation","latLng")) ||
+        parseLatLng(cand.placeLocation) ||
+        parseLatLng(seg.visit.location);
+
+      if(c){
+        out.push(pointFeature(c[0],c[1],{
+          segment_no:i+1,
+          type:"visit",
+          name:cand.placeName||cand.name||cand.semanticType||"停留地點",
+          start_time:st,
+          end_time:et,
+          activity_type:"",
+          place_id:cand.placeId||"",
+          source:"semanticSegments.visit"
+        }));
+      }
+    }
+
+    if(seg.activity && typeof seg.activity==="object"){
+      const act=seg.activity;
+      const top=act.topCandidate||{};
+      const atype=top.type||act.activityType||"";
+
+      [
+        ["start","activity_start","移動起點",st,""],
+        ["end","activity_end","移動終點","",et]
+      ].forEach(([key,type,name,s,e])=>{
+        const c=parseLatLng(deepGet(act,key,"latLng")) || parseLatLng(act[key]);
+        if(c){
+          out.push(pointFeature(c[0],c[1],{
+            segment_no:i+1,type,name,start_time:s,end_time:e,
+            activity_type:atype,place_id:"",
+            source:`semanticSegments.activity.${key}`
+          }));
+        }
+      });
+    }
+
+    if(Array.isArray(seg.timelinePath)){
+      const pts=[];
+      seg.timelinePath.forEach(p=>{
+        const c=parseLatLng(p.point);
+        if(!c) return;
+        let tm=p.time||"";
+        if(!tm && p.durationMinutesOffsetFromStartTime != null){
+          tm=offsetTime(seg.startTime,p.durationMinutesOffsetFromStartTime);
+        }
+        pts.push({lat:c[0],lng:c[1],time:parseTime(tm)});
+      });
+      if(pts.length>=2){
+        out.push(lineFeature(pts,{
+          segment_no:i+1,
+          type:"timeline_route",
+          name:"移動路線",
+          start_time:st,
+          end_time:et,
+          activity_type:"",
+          source:"semanticSegments.timelinePath"
+        }));
+      }
+    }
+  });
+  return out;
+}
+
+function parseTimelineObjects(data){
+  const out=[];
+  const list=Array.isArray(data.timelineObjects)?data.timelineObjects:[];
+  list.forEach((obj,i)=>{
+    const visit=obj.placeVisit;
+    if(visit && typeof visit==="object"){
+      const loc=visit.location||{};
+      const c=parseLatLng(loc);
+      const dur=visit.duration||{};
+      if(c){
+        out.push(pointFeature(c[0],c[1],{
+          segment_no:i+1,type:"visit",
+          name:loc.name||"停留地點",
+          start_time:parseTime(dur.startTimestamp||dur.startTimestampMs),
+          end_time:parseTime(dur.endTimestamp||dur.endTimestampMs),
+          activity_type:"",place_id:loc.placeId||"",
+          source:"timelineObjects.placeVisit"
+        }));
+      }
+    }
+
+    const act=obj.activitySegment;
+    if(act && typeof act==="object"){
+      const dur=act.duration||{};
+      const atype=act.activityType||"";
+      const st=parseTime(dur.startTimestamp||dur.startTimestampMs);
+      const et=parseTime(dur.endTimestamp||dur.endTimestampMs);
+
+      [
+        ["startLocation","activity_start","移動起點",st,""],
+        ["endLocation","activity_end","移動終點","",et]
+      ].forEach(([key,type,name,s,e])=>{
+        const c=parseLatLng(act[key]);
+        if(c){
+          out.push(pointFeature(c[0],c[1],{
+            segment_no:i+1,type,name,start_time:s,end_time:e,
+            activity_type:atype,place_id:"",
+            source:"timelineObjects.activitySegment"
+          }));
+        }
+      });
+
+      const waypoints=deepGet(act,"waypointPath","waypoints");
+      if(Array.isArray(waypoints)){
+        const pts=[];
+        waypoints.forEach(w=>{
+          const c=parseLatLng(w);
+          if(c) pts.push({lat:c[0],lng:c[1]});
+        });
+        if(pts.length>=2){
+          out.push(lineFeature(pts,{
+            segment_no:i+1,type:"timeline_route",name:"移動路線",
+            start_time:st,end_time:et,activity_type:atype,
+            source:"timelineObjects.waypointPath"
+          }));
+        }
+      }
+    }
+  });
+  return out;
+}
+
+function parseRawSignals(data){
+  const out=[];
+  const list=Array.isArray(data.rawSignals)?data.rawSignals:[];
+  list.forEach((sig,i)=>{
+    const pos=sig.position||{};
+    const c=parseLatLng(pos.LatLng||pos.latLng||pos);
+    if(c){
+      out.push(pointFeature(c[0],c[1],{
+        segment_no:i+1,type:"raw_signal",name:"原始定位點",
+        start_time:parseTime(pos.timestamp||sig.timestamp),
+        end_time:"",activity_type:"",place_id:"",
+        source:"rawSignals"
+      }));
+    }
+  });
+  return out;
+}
+
+function parseTimeline(data){
+  let f=[];
+  const formats=[];
+  if(data && Array.isArray(data.semanticSegments)){
+    formats.push("semanticSegments");
+    f=f.concat(parseSemanticSegments(data));
+  }
+  if(data && Array.isArray(data.timelineObjects)){
+    formats.push("timelineObjects");
+    f=f.concat(parseTimelineObjects(data));
+  }
+  if(data && Array.isArray(data.rawSignals)){
+    formats.push("rawSignals");
+    f=f.concat(parseRawSignals(data));
+  }
+  return {features:f,formats};
+}
+
+// ---------- Date index / calendar ----------
+function featureDate(f){
+  const p=f.properties||{};
+  for(const v of [p.start_time,p.end_time,p.time,p.timestamp]){
+    if(v && String(v).length>=10) return String(v).slice(0,10);
+  }
+  return "";
+}
+
+function buildDateIndex(features){
+  const index=new Map();
+  for(const f of features){
+    const d=featureDate(f);
+    if(!d) continue;
+    if(!index.has(d)) index.set(d,[]);
+    index.get(d).push(f);
+  }
+  return index;
+}
+
+function fmtDate(y,m,d){
+  return `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
+
+function renderCalendar(){
+  daysEl.innerHTML="";
+  calTitle.textContent=`${calendarYear} 年 ${calendarMonth+1} 月`;
+
+  const first=new Date(calendarYear,calendarMonth,1);
+  const startDay=first.getDay();
+  const daysInMonth=new Date(calendarYear,calendarMonth+1,0).getDate();
+  const prevDays=new Date(calendarYear,calendarMonth,0).getDate();
+
+  const cells=42;
+  const todayKey=new Date().toISOString().slice(0,10);
+
+  for(let i=0;i<cells;i++){
+    let y=calendarYear,m=calendarMonth,d;
+    let inCurrent=true;
+
+    if(i<startDay){
+      d=prevDays-startDay+i+1;
+      m--;
+      inCurrent=false;
+      if(m<0){m=11;y--}
+    }else if(i>=startDay+daysInMonth){
+      d=i-(startDay+daysInMonth)+1;
+      m++;
+      inCurrent=false;
+      if(m>11){m=0;y++}
+    }else{
+      d=i-startDay+1;
+    }
+
+    const key=fmtDate(y,m,d);
+    const btn=document.createElement("button");
+    btn.className="day"+(inCurrent?" current-month":"");
+    if(dateIndex.has(key)) btn.classList.add("has-data");
+    if(key===selectedDate) btn.classList.add("selected");
+    if(key===todayKey) btn.classList.add("today");
+    btn.innerHTML=`<span class="num">${d}</span>`;
+
+    if(dateIndex.has(key)){
+      btn.onclick=()=>selectDate(key,true);
+      btn.title=`${key} 有時間軸資料`;
+    }else{
+      btn.disabled=true;
+      btn.title=`${key} 無時間軸資料`;
+    }
+    daysEl.appendChild(btn);
+  }
+}
+
+function selectDate(date, syncCalendar=true){
+  if(!dateIndex.has(date)) return;
+  selectedDate=date;
+  try{
+    localStorage.setItem("timelineLastSelectedDate", date);
+  }catch(_e){}
+
+  const d=new Date(date+"T00:00:00");
+  if(syncCalendar){
+    calendarYear=d.getFullYear();
+    calendarMonth=d.getMonth();
+  }
+
+  currentDateEl.textContent=date;
+  updateDayNav();
+  renderCalendar();
+  renderSelectedDate();
+}
+
+function updateDayNav(){
+  const idx=dataDates.indexOf(selectedDate);
+  prevDataDay.disabled=idx<=0;
+  nextDataDay.disabled=idx<0 || idx>=dataDates.length-1;
+}
+
+$("prevMonth").onclick=()=>{
+  calendarMonth--;
+  if(calendarMonth<0){calendarMonth=11;calendarYear--}
+  renderCalendar();
+};
+$("nextMonth").onclick=()=>{
+  calendarMonth++;
+  if(calendarMonth>11){calendarMonth=0;calendarYear++}
+  renderCalendar();
+};
+$("prevYear").onclick=()=>{calendarYear--;renderCalendar()};
+$("nextYear").onclick=()=>{calendarYear++;renderCalendar()};
+
+prevDataDay.onclick=()=>{
+  const i=dataDates.indexOf(selectedDate);
+  if(i>0) selectDate(dataDates[i-1],true);
+};
+nextDataDay.onclick=()=>{
+  const i=dataDates.indexOf(selectedDate);
+  if(i>=0 && i<dataDates.length-1) selectDate(dataDates[i+1],true);
+};
+
+// ---------- Map ----------
+function lon2x(lon,z){return(lon+180)/360*Math.pow(2,z)*TILE}
+function lat2y(lat,z){
+  const r=lat*Math.PI/180;
+  return(1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*Math.pow(2,z)*TILE;
+}
+function x2lon(x,z){return x/(Math.pow(2,z)*TILE)*360-180}
+function y2lat(y,z){
+  const n=Math.PI-2*Math.PI*y/(Math.pow(2,z)*TILE);
+  return 180/Math.PI*Math.atan(.5*(Math.exp(n)-Math.exp(-n)));
+}
+function worldCenter(){return{x:lon2x(center.lng,zoom),y:lat2y(center.lat,zoom)}}
+function screenPoint(lng,lat){
+  const c=worldCenter();
+  return{
+    x:lon2x(lng,zoom)-c.x+mapWrap.clientWidth/2,
+    y:lat2y(lat,zoom)-c.y+mapWrap.clientHeight/2
+  };
+}
+function mapColor(t){
+  return({
+    visit:"#188038",
+    activity_start:"#7c3aed",
+    activity_end:"#d93025",
+    raw_signal:"#6b7280",
+    timeline_route:"#2563eb"
+  })[t]||"#2563eb";
+}
+
+function resizeCanvas(){
+  const ratio=window.devicePixelRatio||1;
+  const w=mapWrap.clientWidth;
+  const h=mapWrap.clientHeight;
+  canvas.width=Math.max(1,Math.round(w*ratio));
+  canvas.height=Math.max(1,Math.round(h*ratio));
+  canvas.style.width=w+"px";
+  canvas.style.height=h+"px";
+  ctx.setTransform(ratio,0,0,ratio,0,0);
+}
+
+function renderTiles(){
+  tilesEl.innerHTML="";
+  tileOK=0;tileBad=0;
+  const w=mapWrap.clientWidth,h=mapWrap.clientHeight;
+  const c=worldCenter();
+  const left=c.x-w/2,top=c.y-h/2,n=Math.pow(2,zoom);
+
+  const minTX=Math.floor(left/TILE)-1;
+  const maxTX=Math.floor((left+w)/TILE)+1;
+  const minTY=Math.floor(top/TILE)-1;
+  const maxTY=Math.floor((top+h)/TILE)+1;
+
+  for(let tx=minTX;tx<=maxTX;tx++){
+    for(let ty=minTY;ty<=maxTY;ty++){
+      if(tx<0||tx>=n||ty<0||ty>=n) continue;
+
+      const img=document.createElement("img");
+      img.className="tile";
+      img.src=ONLINE_TILE(zoom,tx,ty);
+      img.style.left=(tx*TILE-left)+"px";
+      img.style.top=(ty*TILE-top)+"px";
+      img.alt="";
+      img.onload=()=>{
+        tileOK++;
+        if(tileOK>1) mapStatus.textContent="線上底圖：國土測繪中心";
+      };
+      img.onerror=()=>{
+        tileBad++;
+        img.remove();
+        if(tileOK===0 && tileBad>2) mapStatus.textContent="底圖載入失敗／目前無網路";
+      };
+      tilesEl.appendChild(img);
+    }
+  }
+}
+
+function currentFeatures(){
+  if(!selectedDate) return [];
+  const arr=dateIndex.get(selectedDate)||[];
+  if(showRaw.checked) return arr;
+  return arr.filter(f=>(f.properties||{}).type!=="raw_signal");
+}
+
+function drawOverlay(){
+  resizeCanvas();
+  ctx.clearRect(0,0,mapWrap.clientWidth,mapWrap.clientHeight);
+  hitPoints=[];
+
+  const fs=currentFeatures();
+
+  // routes first
+  for(const f of fs){
+    const g=f.geometry||{};
+    const p=f.properties||{};
+    if(g.type!=="LineString") continue;
+
+    ctx.beginPath();
+    let started=false;
+    for(const c of g.coordinates||[]){
+      const q=screenPoint(+c[0],+c[1]);
+      if(!started){ctx.moveTo(q.x,q.y);started=true}
+      else ctx.lineTo(q.x,q.y);
+    }
+    ctx.strokeStyle=mapColor(p.type);
+    ctx.lineWidth=4;
+    ctx.lineJoin="round";
+    ctx.lineCap="round";
+    ctx.stroke();
+  }
+
+  // points
+  for(const f of fs){
+    const g=f.geometry||{};
+    const p=f.properties||{};
+    if(g.type!=="Point") continue;
+
+    const q=screenPoint(+g.coordinates[0],+g.coordinates[1]);
+    const r=p.type==="visit"?7:4;
+
+    ctx.beginPath();
+    ctx.arc(q.x,q.y,r,0,Math.PI*2);
+    ctx.fillStyle=mapColor(p.type);
+    ctx.fill();
+    ctx.lineWidth=1.5;
+    ctx.strokeStyle="#fff";
+    ctx.stroke();
+
+    hitPoints.push({x:q.x,y:q.y,r:Math.max(9,r+4),feature:f});
+  }
+}
+
+function renderMap(){
+  renderTiles();
+  drawOverlay();
+}
+
+function fitFeatures(fs){
+  const coords=[];
+  for(const f of fs){
+    const g=f.geometry||{};
+    if(g.type==="Point") coords.push(g.coordinates);
+    else if(g.type==="LineString") coords.push(...(g.coordinates||[]));
+  }
+
+  if(!coords.length){
+    center={lat:23.7,lng:120.9};
+    zoom=8;
+    renderMap();
+    return;
+  }
+
+  let minLng=Infinity,maxLng=-Infinity,minLat=Infinity,maxLat=-Infinity;
+  for(const c of coords){
+    minLng=Math.min(minLng,+c[0]);
+    maxLng=Math.max(maxLng,+c[0]);
+    minLat=Math.min(minLat,+c[1]);
+    maxLat=Math.max(maxLat,+c[1]);
+  }
+
+  center={lat:(minLat+maxLat)/2,lng:(minLng+maxLng)/2};
+  zoom=MIN_ZOOM;
+
+  for(let z=MAX_ZOOM;z>=MIN_ZOOM;z--){
+    const dx=lon2x(maxLng,z)-lon2x(minLng,z);
+    const dy=lat2y(minLat,z)-lat2y(maxLat,z);
+    if(dx<=mapWrap.clientWidth*.78 && dy<=mapWrap.clientHeight*.78){
+      zoom=z;
+      break;
+    }
+  }
+  renderMap();
+}
+
+function renderSelectedDate(){
+  empty.style.display="none";
+  popup.style.display="none";
+
+  const fs=currentFeatures();
+  const allToday=dateIndex.get(selectedDate)||[];
+
+  const pointCount=fs.filter(f=>(f.geometry||{}).type==="Point").length;
+  const routeCount=fs.filter(f=>(f.geometry||{}).type==="LineString").length;
+  const visitCount=fs.filter(f=>(f.properties||{}).type==="visit").length;
+  const rawCount=fs.filter(f=>(f.properties||{}).type==="raw_signal").length;
+
+  $("statPoints").textContent=`定位點：${pointCount}`;
+  $("statRoutes").textContent=`路線：${routeCount}`;
+  $("statVisits").textContent=`停留：${visitCount}`;
+  $("statRaw").textContent=`Raw：${rawCount}`;
+
+  renderRecords(fs);
+  fitFeatures(fs.length?fs:allToday);
+}
+
+function renderRecords(fs){
+  recordsEl.innerHTML="";
+  const pts=fs
+    .filter(f=>(f.geometry||{}).type==="Point" && (f.properties||{}).type!=="raw_signal")
+    .sort((a,b)=>String((a.properties||{}).start_time||"").localeCompare(String((b.properties||{}).start_time||"")));
+
+  if(!pts.length){
+    recordsEl.innerHTML='<div class="sub" style="padding-top:8px">當日沒有停留／起訖點紀錄。</div>';
+    return;
+  }
+
+  for(const f of pts.slice(0,600)){
+    const p=f.properties||{};
+    const div=document.createElement("div");
+    div.className="record";
+    div.innerHTML=`<b>${escapeHtml(p.name||p.type||"定位點")}</b><span>${escapeHtml(p.start_time||p.end_time||"")}</span>`;
+    div.onclick=()=>{
+      const c=f.geometry.coordinates;
+      center={lat:+c[1],lng:+c[0]};
+      zoom=15;
+      renderMap();
+      showPopup(f,55,80);
+    };
+    recordsEl.appendChild(div);
+  }
+}
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function showPopup(f,x,y){
+  const p=f.properties||{};
+  const rows=[
+    ["名稱",p.name],
+    ["類型",p.type],
+    ["開始",p.start_time],
+    ["結束",p.end_time],
+    ["交通方式",p.activity_type],
+    ["Place ID",p.place_id]
+  ].filter(r=>r[1]);
+
+  popup.innerHTML='<button class="close">×</button>'+rows.map(r=>`<div><b>${escapeHtml(r[0])}</b>：${escapeHtml(r[1])}</div>`).join("");
+  popup.style.left=Math.min(x+12,mapWrap.clientWidth-350)+"px";
+  popup.style.top=Math.max(8,y+12)+"px";
+  popup.style.display="block";
+  popup.querySelector(".close").onclick=()=>popup.style.display="none";
+}
+
+canvas.addEventListener("click",e=>{
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left;
+  const y=e.clientY-rect.top;
+  let best=null,bestD=Infinity;
+
+  for(const h of hitPoints){
+    const d=Math.hypot(x-h.x,y-h.y);
+    if(d<=h.r && d<bestD){best=h;bestD=d}
+  }
+  if(best) showPopup(best.feature,x,y);
+});
+
+canvas.addEventListener("wheel",e=>{
+  e.preventDefault();
+  zoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoom+(e.deltaY<0?1:-1)));
+  renderMap();
+},{passive:false});
+
+canvas.addEventListener("pointerdown",e=>{
+  dragging=true;
+  dragStart={x:e.clientX,y:e.clientY,world:worldCenter()};
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove",e=>{
+  if(!dragging||!dragStart) return;
+  const dx=e.clientX-dragStart.x;
+  const dy=e.clientY-dragStart.y;
+  center.lng=x2lon(dragStart.world.x-dx,zoom);
+  center.lat=y2lat(dragStart.world.y-dy,zoom);
+  renderMap();
+});
+canvas.addEventListener("pointerup",()=>{dragging=false;dragStart=null});
+canvas.addEventListener("pointercancel",()=>{dragging=false;dragStart=null});
+
+$("fitBtn").onclick=()=>{
+  if(!selectedDate) return;
+  const allToday=dateIndex.get(selectedDate)||[];
+  if(!allToday.length) return;
+  fitFeatures(allToday);
+};
+$("zoomInBtn").onclick=()=>{zoom=Math.min(MAX_ZOOM,zoom+1);renderMap()};
+$("zoomOutBtn").onclick=()=>{zoom=Math.max(MIN_ZOOM,zoom-1);renderMap()};
+showRaw.onchange=()=>{if(selectedDate) renderSelectedDate()};
+
+window.addEventListener("resize",()=>{if(selectedDate) renderMap()});
+
+// ---------- File load ----------
+
+try{
+  const lastName=localStorage.getItem("timelineLastFileName");
+  if(lastName){
+    fileInfo.textContent=`上次選擇：${lastName}（請按上方選檔，瀏覽器通常會回到上次資料夾）`;
+  }
+}catch(_e){}
+
+fileInput.addEventListener("change",async e=>{
+  const file=e.target.files?.[0];
+  if(!file) return;
+  try{
+    localStorage.setItem("timelineLastFileName", file.name);
+  }catch(_e){}
+
+  fileInfo.textContent=`正在讀取：${file.name}`;
+  mapStatus.textContent="正在解析時間軸…";
+  empty.style.display="flex";
+  empty.innerHTML="正在解析時間軸資料…";
+
+  try{
+    const text=await file.text();
+    const data=JSON.parse(text);
+    const parsed=parseTimeline(data);
+
+    if(!parsed.features.length){
+      throw new Error("沒有解析到 semanticSegments、timelineObjects 或 rawSignals 的定位資料。");
+    }
+
+    allFeatures=parsed.features;
+    dateIndex=buildDateIndex(allFeatures);
+    dataDates=[...dateIndex.keys()].sort();
+
+    if(!dataDates.length){
+      throw new Error("時間軸中沒有可辨識的日期。");
+    }
+
+    const first=dataDates[0];
+    const last=dataDates[dataDates.length-1];
+
+    fileInfo.innerHTML=
+      `<b>${escapeHtml(file.name)}</b><br>`+
+      `格式：${parsed.formats.join(", ")}<br>`+
+      `資料日期：${first} ～ ${last}（${dataDates.length.toLocaleString()} 天）<br>`+
+      `特徵數：${allFeatures.length.toLocaleString()}`;
+
+    let targetDate=last;
+    try{
+      const remembered=localStorage.getItem("timelineLastSelectedDate");
+      if(remembered && dateIndex.has(remembered)) targetDate=remembered;
+    }catch(_e){}
+
+    const target=new Date(targetDate+"T00:00:00");
+    calendarYear=target.getFullYear();
+    calendarMonth=target.getMonth();
+
+    renderCalendar();
+    selectDate(targetDate,true);
+    mapStatus.textContent="線上底圖：準備載入";
+
+  }catch(err){
+    console.error(err);
+    allFeatures=[];
+    dateIndex=new Map();
+    dataDates=[];
+    selectedDate=null;
+    fileInfo.textContent="讀取失敗："+err.message;
+    daysEl.innerHTML="";
+    currentDateEl.textContent="尚未選擇";
+    recordsEl.innerHTML="";
+    empty.style.display="flex";
+    empty.innerHTML="讀取失敗<br>"+escapeHtml(err.message);
+    mapStatus.textContent="讀取失敗";
+  }
+});
+</script>
+</body>
+</html>
