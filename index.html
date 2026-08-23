@@ -446,6 +446,8 @@ body.capture-clean .mapStatus{bottom:28px}
           <option value="2">2×</option>
           <option value="5">5×</option>
           <option value="10">10×</option>
+          <option value="50">50×</option>
+          <option value="100">100×</option>
         </select>
       </label>
       <label><input id="animationFollow" type="checkbox" checked> 自動跟隨</label>
@@ -619,6 +621,7 @@ let animationRegionMode = null;      // "TAIWAN" 或 "FOREIGN"
 let animationRegionBounds = null;    // 只記錄目前所在區域，不把臺灣＋美國一起 fit 成世界圖
 let animationRegionLastCoord = null;
 let animationCurrentRouteKey = null;
+let animationSyntheticLines = []; // 缺漏的跨國／長距離移動自動補線，亦保留到最終世界圖
 let detectedTrips = [];
 let worldFinalMode = false;
 let animationCompletedOnce = false;
@@ -1384,6 +1387,20 @@ function drawOverlay(){
       ctx.lineCap="round";
       ctx.stroke();
     }
+    // 缺漏跨國補線也一併畫入最後世界總覽。
+    for(const line of animationSyntheticLines){
+      if(!line || line.length<2) continue;
+      ctx.beginPath();
+      line.forEach((c,i)=>{
+        const q=screenPoint(Number(c[0]),Number(c[1]));
+        if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+      });
+      ctx.strokeStyle="#d93025";
+      ctx.lineWidth=3;
+      ctx.lineJoin="round";
+      ctx.lineCap="round";
+      ctx.stroke();
+    }
     return;
   }
 
@@ -1588,6 +1605,18 @@ function getAllRouteBounds(){
     const g=f.geometry||{};
     if(g.type!=="LineString") continue;
     for(const c of g.coordinates||[]){
+      if(!c || c.length<2) continue;
+      const lng=Number(c[0]), lat=Number(c[1]);
+      if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+      if(!b) b={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
+      else{
+        b.minLng=Math.min(b.minLng,lng); b.maxLng=Math.max(b.maxLng,lng);
+        b.minLat=Math.min(b.minLat,lat); b.maxLat=Math.max(b.maxLat,lat);
+      }
+    }
+  }
+  for(const line of animationSyntheticLines){
+    for(const c of line||[]){
       if(!c || c.length<2) continue;
       const lng=Number(c[0]), lat=Number(c[1]);
       if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
@@ -1847,6 +1876,7 @@ function resetAnimationDrawing(clearUI=true){
   animationRegionBounds=null;
   animationRegionLastCoord=null;
   animationCurrentRouteKey=null;
+  animationSyntheticLines=[];
   if(clearUI){
     animationProgress.value=0;
     animationProgress.disabled=true;
@@ -1876,7 +1906,9 @@ function syncAnimationDate(item){
 }
 
 function shouldBridgeMissingRoute(fromCoord,toCoord,item){
-  if(!fromCoord || !toCoord || item.kind==="route") return false;
+  if(!fromCoord || !toCoord) return false;
+  // 同一條實際 route 內部本身已有連線，不再重複補線。
+  if(item.kind==="route" && animationCurrentRouteKey===item.routeKey && animationCurrentLine && animationCurrentLine.length) return false;
   const km=haversineKm(fromCoord,toCoord);
   if(km<80) return false;
 
@@ -1898,10 +1930,12 @@ function bridgeMissingRoute(fromCoord,toCoord){
   }
   animationCurrentLine=null;
   animationCurrentRouteKey=null;
-  animationDrawnLines.push([
+  const bridge=[
     [Number(fromCoord[0]),Number(fromCoord[1])],
     [Number(toCoord[0]),Number(toCoord[1])]
-  ]);
+  ];
+  animationDrawnLines.push(bridge);
+  animationSyntheticLines.push(bridge);
 }
 
 function consumeAnimationItem(item){
@@ -2033,7 +2067,7 @@ animationProgress.addEventListener("input",()=>{
   const wasRunning=animationRunning;
   animationRunning=false;
   if(animationRAF) cancelAnimationFrame(animationRAF);
-  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCurrentRouteKey=null;
+  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCurrentRouteKey=null; animationSyntheticLines=[];
   animationIndex=0;
   for(let i=0;i<=target;i++){
     consumeAnimationItem(animationItems[i]);
