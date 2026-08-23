@@ -366,7 +366,7 @@ button{cursor:pointer}
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
     </div>
-    <div class="legend">● 綠：停留　● 紫：起點　● 紅：終點　— 藍：移動路線</div>
+    <div class="legend">● 綠：停留　● 紫：起點　● 紅：終點　— 藍：移動路線　｜　最大 Zoom 19</div>
 
     <div id="mapWrap">
       <div id="tiles"></div>
@@ -383,9 +383,16 @@ button{cursor:pointer}
 
 const TILE = 256;
 const MIN_ZOOM = 7;
-const MAX_ZOOM = 15;
-const ONLINE_TILE = (z,x,y) =>
-  `https://wmts.nlsc.gov.tw/wmts/EMAP6_OPENDATA/default/GoogleMapsCompatible/${z}/${y}/${x}`;
+const MAX_ZOOM = 19;
+const ONLINE_TILE = (z,x,y) => {
+  // Z7～15 使用已確認可正常讀取的 OpenData 圖層
+  if(z <= 15){
+    return `https://wmts.nlsc.gov.tw/wmts/EMAP6_OPENDATA/default/GoogleMapsCompatible/${z}/${y}/${x}`;
+  }
+
+  // Z16～19 自動切換至 EMAP6 高層級圖資
+  return `https://wmts.nlsc.gov.tw/wmts/EMAP6/default/GoogleMapsCompatible/${z}/${y}/${x}`;
+};
 
 const $ = id => document.getElementById(id);
 
@@ -844,12 +851,21 @@ function renderTiles(){
       img.alt="";
       img.onload=()=>{
         tileOK++;
-        if(tileOK>1) mapStatus.textContent="線上底圖：國土測繪中心";
+        if(tileOK>1){
+          const layerName = zoom <= 15 ? "EMAP6_OPENDATA" : "EMAP6";
+          mapStatus.textContent=`線上底圖：${layerName}　Zoom ${zoom}`;
+        }
       };
       img.onerror=()=>{
         tileBad++;
         img.remove();
-        if(tileOK===0 && tileBad>2) mapStatus.textContent="底圖載入失敗／目前無網路";
+        if(tileOK===0 && tileBad>2){
+          if(zoom >= 16){
+            mapStatus.textContent=`Zoom ${zoom} 高層級圖資載入失敗`;
+          }else{
+            mapStatus.textContent="底圖載入失敗／目前無網路";
+          }
+        }
       };
       tilesEl.appendChild(img);
     }
