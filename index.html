@@ -376,7 +376,7 @@ button{cursor:pointer}
         <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
       </div>
       <div id="days" class="days"></div>
-      <div class="no-data-note">藍框＝目前可選日期；「出國日」可只顯示臺灣以外有紀錄的日期。</div>
+      <div class="no-data-note">藍框＝目前可選日期；開啟「出國日」後，只瀏覽有出國紀錄的年份與月份。</div>
     </div>
 
     <div class="travel-filter">
@@ -817,6 +817,90 @@ function activeDateList(){
   return travelFilterOn ? foreignDates : dataDates;
 }
 
+function foreignMonthKeys(){
+  return [...new Set(foreignDates.map(d=>d.slice(0,7)))].sort();
+}
+
+function foreignYears(){
+  return [...new Set(foreignDates.map(d=>Number(d.slice(0,4))))].sort((a,b)=>a-b);
+}
+
+function jumpToMonthKey(monthKey){
+  if(!monthKey) return;
+  const [y,m]=monthKey.split("-").map(Number);
+  calendarYear=y;
+  calendarMonth=m-1;
+  renderCalendar();
+  positionSidebarForCalendar();
+}
+
+function moveForeignMonth(direction){
+  const months=foreignMonthKeys();
+  if(!months.length) return;
+
+  const current=`${calendarYear}-${String(calendarMonth+1).padStart(2,"0")}`;
+  let idx=months.indexOf(current);
+
+  if(idx<0){
+    // 若目前月份不在清單內，找最近方向上的月份
+    if(direction>0){
+      idx=months.findIndex(m=>m>current);
+      if(idx<0) idx=months.length;
+      idx-=1;
+    }else{
+      idx=months.length-1;
+      for(let i=months.length-1;i>=0;i--){
+        if(months[i]<current){ idx=i+1; break; }
+      }
+    }
+  }
+
+  const nextIdx=idx+direction;
+  if(nextIdx<0 || nextIdx>=months.length) return;
+  jumpToMonthKey(months[nextIdx]);
+}
+
+function moveForeignYear(direction){
+  const years=foreignYears();
+  if(!years.length) return;
+
+  let idx=years.indexOf(calendarYear);
+
+  if(idx<0){
+    if(direction>0){
+      idx=years.findIndex(y=>y>calendarYear);
+      if(idx<0) idx=years.length;
+      idx-=1;
+    }else{
+      idx=years.length-1;
+      for(let i=years.length-1;i>=0;i--){
+        if(years[i]<calendarYear){ idx=i+1; break; }
+      }
+    }
+  }
+
+  const nextIdx=idx+direction;
+  if(nextIdx<0 || nextIdx>=years.length) return;
+
+  const targetYear=years[nextIdx];
+  const months=foreignMonthKeys().filter(m=>Number(m.slice(0,4))===targetYear);
+  if(!months.length) return;
+
+  // 優先跳到該年度最接近目前月份的有資料月份
+  const currentMonth=calendarMonth+1;
+  let best=months[0];
+  let bestDiff=Infinity;
+  for(const mk of months){
+    const mm=Number(mk.slice(5,7));
+    const diff=Math.abs(mm-currentMonth);
+    if(diff<bestDiff){
+      bestDiff=diff;
+      best=mk;
+    }
+  }
+  jumpToMonthKey(best);
+}
+
 // ---------- Date index / calendar ----------
 function featureDate(f){
   const p=f.properties||{};
@@ -844,6 +928,24 @@ function fmtDate(y,m,d){
 function renderCalendar(){
   daysEl.innerHTML="";
   calTitle.textContent=`${calendarYear} 年 ${calendarMonth+1} 月`;
+
+  if(travelFilterOn){
+    const months=foreignMonthKeys();
+    const years=foreignYears();
+    const current=`${calendarYear}-${String(calendarMonth+1).padStart(2,"0")}`;
+    const mi=months.indexOf(current);
+    const yi=years.indexOf(calendarYear);
+
+    $("prevMonth").disabled = mi<=0;
+    $("nextMonth").disabled = mi<0 || mi>=months.length-1;
+    $("prevYear").disabled = yi<=0;
+    $("nextYear").disabled = yi<0 || yi>=years.length-1;
+  }else{
+    $("prevMonth").disabled=false;
+    $("nextMonth").disabled=false;
+    $("prevYear").disabled=false;
+    $("nextYear").disabled=false;
+  }
 
   const first=new Date(calendarYear,calendarMonth,1);
   const startDay=first.getDay();
@@ -918,17 +1020,42 @@ function updateDayNav(){
 }
 
 $("prevMonth").onclick=()=>{
+  if(travelFilterOn){
+    moveForeignMonth(-1);
+    return;
+  }
   calendarMonth--;
   if(calendarMonth<0){calendarMonth=11;calendarYear--}
   renderCalendar();
 };
+
 $("nextMonth").onclick=()=>{
+  if(travelFilterOn){
+    moveForeignMonth(1);
+    return;
+  }
   calendarMonth++;
   if(calendarMonth>11){calendarMonth=0;calendarYear++}
   renderCalendar();
 };
-$("prevYear").onclick=()=>{calendarYear--;renderCalendar()};
-$("nextYear").onclick=()=>{calendarYear++;renderCalendar()};
+
+$("prevYear").onclick=()=>{
+  if(travelFilterOn){
+    moveForeignYear(-1);
+    return;
+  }
+  calendarYear--;
+  renderCalendar();
+};
+
+$("nextYear").onclick=()=>{
+  if(travelFilterOn){
+    moveForeignYear(1);
+    return;
+  }
+  calendarYear++;
+  renderCalendar();
+};renderCalendar()};
 
 prevDataDay.onclick=()=>{
   const list=activeDateList();
@@ -948,37 +1075,34 @@ travelFilterBtn.onclick=()=>{
   travelFilterBtn.classList.toggle("active",travelFilterOn);
   travelFilterBtn.textContent=travelFilterOn ? "出國日：開啟" : "出國日";
 
-  const list=activeDateList();
-
   if(travelFilterOn){
-    if(!list.length){
+    if(!foreignDates.length){
       travelFilterOn=false;
       travelFilterBtn.classList.remove("active");
       travelFilterBtn.textContent="出國日";
       alert("目前時間軸中沒有偵測到臺灣以外的日期。");
       renderCalendar();
       updateDayNav();
+      positionSidebarForCalendar();
       return;
     }
 
-    // 若目前不是出國日，直接跳到最近一個出國日。
-    if(!foreignDateSet.has(selectedDate)){
-      let target=list[0];
-      for(const d of list){
-        if(d >= selectedDate){
-          target=d;
-          break;
-        }
-      }
-      selectDate(target,true);
-      return;
-    }
+    // 開啟時一律跳到所有出國日中最早的一天所在月份，
+    // 並直接選取最早出國日。
+    const earliest=foreignDates[0];
+    const d=new Date(earliest+"T00:00:00");
+    calendarYear=d.getFullYear();
+    calendarMonth=d.getMonth();
+    selectDate(earliest,false);
+    renderCalendar();
+    updateDayNav();
+    positionSidebarForCalendar();
+    return;
   }
 
+  // 關閉後維持目前選取日期，但恢復一般月份導航。
   renderCalendar();
   updateDayNav();
-
-  // 切換出國日模式後維持操作區位置。
   positionSidebarForCalendar();
 };
 
