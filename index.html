@@ -260,6 +260,22 @@ button{cursor:pointer}
   padding:8px 11px;
 }
 .toolbar button:hover{background:#f8fafc}.toolbar button#fitBtn{font-weight:700;border-color:#9bbcf5;background:#f5f9ff}
+.animbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.animbar button,.animbar select{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 10px}
+.animbar button.primary{font-weight:800;border-color:#8ab4f8;background:#f5f9ff;color:#174ea6}
+.animbar button:disabled{opacity:.45;cursor:not-allowed}
+.animbar label{font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center}
+.anim-progress{display:grid;grid-template-columns:auto minmax(140px,1fr) auto;gap:8px;align-items:center;width:100%;font-size:12px;color:var(--muted)}
+.anim-progress input[type=range]{width:100%}
+.anim-now{font-weight:800;color:#374151;white-space:nowrap}
+.export-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;width:100%;padding-top:2px}
+.export-actions button{font-weight:800;border-color:#86a8df;background:#f5f9ff;color:#174ea6}
+.export-actions .export-note{font-size:12px;color:var(--muted)}
+body.capture-clean .sidebar,body.capture-clean .animbar,body.capture-clean .toolbar,body.capture-clean .legend{display:none!important}
+body.capture-clean .app{grid-template-columns:1fr}
+body.capture-clean .main{padding:0;height:100vh}
+body.capture-clean #mapWrap{border:0;border-radius:0;min-height:100vh}
+body.capture-clean .mapStatus{bottom:28px}
 .legend{
   color:var(--muted);
   font-size:12px;
@@ -357,7 +373,7 @@ button{cursor:pointer}
 <div class="app">
   <aside id="sidebar" class="sidebar">
     <h1 class="title">Google 時間軸網頁版</h1>
-    <div class="sub">直接選擇手機匯出的「時間軸.json」。臺灣自動使用國土測繪中心底圖，國外自動切換全球底圖；同一天跨國也能混合顯示。</div>
+    <div class="sub">直接選擇手機匯出的「時間軸.json」。播放歷史動畫後會停在世界總覽，可從同一頁產生動畫 WebM 與最終世界路線 PNG。</div>
 
     <div id="fileBox" class="filebox">
       <input id="fileInput" type="file" accept=".json,application/json">
@@ -407,19 +423,55 @@ button{cursor:pointer}
   </aside>
 
   <main class="main">
+    <div class="animbar">
+      <button id="playHistoryBtn" class="primary">▶ 歷史動畫</button>
+      <button id="pauseHistoryBtn" disabled>⏸ 暫停</button>
+      <button id="stopHistoryBtn" disabled>■ 停止</button>
+      <label>範圍
+        <select id="animationScope">
+          <option value="all">全部歷史</option>
+          <option value="trip">單一出國旅程</option>
+          <option value="month">目前月份</option>
+          <option value="day">目前日期</option>
+          <option value="foreign">全部出國日</option>
+        </select>
+      </label>
+      <label id="tripSelectLabel" style="display:none">旅程
+        <select id="tripSelect" disabled></select>
+      </label>
+      <label>速度
+        <select id="animationSpeed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+          <option value="5">5×</option>
+          <option value="10">10×</option>
+        </select>
+      </label>
+      <label><input id="animationFollow" type="checkbox" checked> 自動跟隨</label>
+      <div class="anim-progress">
+        <span id="animationStartLabel">—</span>
+        <input id="animationProgress" type="range" min="0" max="1000" value="0" disabled>
+        <span id="animationNow" class="anim-now">尚未播放</span>
+      </div>
+      <div class="export-actions">
+        <button id="exportBothBtn" disabled>產生動畫檔＋世界圖片</button>
+        <span id="exportStatus" class="export-note">動畫播放完成後即可匯出 WebM＋PNG</span>
+      </div>
+    </div>
     <div class="toolbar">
       <button id="fitBtn">縮放至當日全部路線</button>
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
     </div>
-    <div class="legend">● 綠：停留　● 紫：起點　● 紅：終點　— 藍：移動路線　｜　全球自動底圖 ｜ 最大 Zoom 19</div>
+    <div class="legend">— 藍：單日移動路線　｜　歷史動畫：僅顯示紅色累積路線（不顯示點位）｜跨國缺少路線時自動補紅色直線｜臺灣固定全臺視圖／國外依旅程區域自動切鏡　｜　臺灣單一 NLSC 底圖 ｜ 跨國自動切換 OSM ｜ 最大 Zoom 19</div>
 
     <div id="mapWrap">
       <div id="tiles"></div>
       <canvas id="mapCanvas"></canvas>
       <div id="popup" class="popup"></div>
       <div id="mapStatus" class="mapStatus">請先載入時間軸.json</div>
-      <div class="mapAttrib">臺灣底圖：內政部國土測繪中心 ｜ 國外底圖：© OpenStreetMap contributors</div>
+      <div class="mapAttrib">臺灣底圖：內政部國土測繪中心（全畫面單一圖層） ｜ 跨國/國外：© OpenStreetMap contributors</div>
       <div id="empty" class="empty">請從左側選擇「時間軸.json」<br>資料不會上傳，全部在瀏覽器本機解析。</div>
     </div>
   </main>
@@ -431,38 +483,11 @@ button{cursor:pointer}
 const TILE = 256;
 const MIN_ZOOM = 7;
 const MAX_ZOOM = 19;
-// 每一張圖磚各自判斷來源：臺灣用 NLSC，國外用 OpenStreetMap。
-// 因此同一個畫面／同一天可以同時出現臺灣與國外底圖。
-function tileCenterLonLat(z,x,y){
-  const n=Math.pow(2,z);
-  const lon=((x+0.5)/n)*360-180;
-  const yy=Math.PI*(1-2*((y+0.5)/n));
-  const lat=(180/Math.PI)*Math.atan(Math.sinh(yy));
-  return {lat,lon};
-}
-
-function isTaiwanTile(z,x,y){
-  const p=tileCenterLonLat(z,x,y);
-
-  // 臺灣本島、澎湖、金門、馬祖等常用範圍。
-  // 以圖磚中心判斷，邊界畫面可以自然混用兩種圖資。
-  const mainAndPenghu =
-    p.lon >= 118.0 && p.lon <= 123.0 &&
-    p.lat >= 21.0  && p.lat <= 26.5;
-
-  const kinmen =
-    p.lon >= 118.0 && p.lon <= 118.6 &&
-    p.lat >= 24.2  && p.lat <= 24.7;
-
-  const matsu =
-    p.lon >= 119.8 && p.lon <= 120.6 &&
-    p.lat >= 25.8  && p.lat <= 26.5;
-
-  return mainAndPenghu || kinmen || matsu;
-}
-
-function tileSource(z,x,y){
-  if(isTaiwanTile(z,x,y)){
+const ANIMATION_MIN_ZOOM = 2; // 歷史動畫跨國時允許縮小到洲際尺度
+// 底圖改成「整個畫面只使用單一來源」，避免 NLSC 與 OSM 在同一畫面拼接造成色差與破圖感。
+// 臺灣模式：整個地圖視窗全部使用 NLSC。跨國／國外模式：整個地圖視窗全部使用 OSM。
+function tileSource(z,x,y,mode){
+  if(mode === "TAIWAN"){
     if(z <= 15){
       return {
         provider:"NLSC",
@@ -482,6 +507,42 @@ function tileSource(z,x,y){
     layer:"OpenStreetMap",
     url:`https://tile.openstreetmap.org/${z}/${x}/${y}.png`
   };
+}
+
+function featureCoordinatesAreTaiwan(features){
+  let found=false;
+  for(const f of features||[]){
+    const g=f.geometry||{};
+    if(g.type==="Point"){
+      const c=g.coordinates||[];
+      if(c.length<2) continue;
+      found=true;
+      if(!isTaiwanCoordinate(Number(c[1]),Number(c[0]))) return false;
+    }else if(g.type==="LineString"){
+      for(const c of g.coordinates||[]){
+        if(!c || c.length<2) continue;
+        found=true;
+        if(!isTaiwanCoordinate(Number(c[1]),Number(c[0]))) return false;
+      }
+    }
+  }
+  return found;
+}
+
+function currentBaseMapMode(){
+  if(worldFinalMode) return "GLOBAL";
+  const animationVisible = animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length;
+  if(animationVisible && animationLastCoord){
+    // 動畫期間依「目前所在位置」切換整張底圖：
+    // 在臺灣就是 NLSC；抵達國外就整張改用 OSM；回臺灣再切回 NLSC。
+    return isTaiwanCoordinate(Number(animationLastCoord[1]),Number(animationLastCoord[0])) ? "TAIWAN" : "GLOBAL";
+  }
+
+  if(selectedDate && dateIndex.has(selectedDate)){
+    return featureCoordinatesAreTaiwan(dateIndex.get(selectedDate)) ? "TAIWAN" : "GLOBAL";
+  }
+
+  return isTaiwanCoordinate(center.lat,center.lng) ? "TAIWAN" : "GLOBAL";
 }
 
 const $ = id => document.getElementById(id);
@@ -507,6 +568,19 @@ const mapWrap = $("mapWrap");
 const popup = $("popup");
 const mapStatus = $("mapStatus");
 const empty = $("empty");
+const playHistoryBtn = $("playHistoryBtn");
+const pauseHistoryBtn = $("pauseHistoryBtn");
+const stopHistoryBtn = $("stopHistoryBtn");
+const animationScope = $("animationScope");
+const tripSelectLabel = $("tripSelectLabel");
+const tripSelect = $("tripSelect");
+const animationSpeed = $("animationSpeed");
+const animationFollow = $("animationFollow");
+const animationProgress = $("animationProgress");
+const animationStartLabel = $("animationStartLabel");
+const animationNow = $("animationNow");
+const exportBothBtn = $("exportBothBtn");
+const exportStatus = $("exportStatus");
 
 let allFeatures = [];
 let dateIndex = new Map();
@@ -525,6 +599,31 @@ let dragStart = null;
 let hitPoints = [];
 let tileOK = 0;
 let tileBad = 0;
+
+// ---------- History animation ----------
+let animationItems = [];
+let animationIndex = 0;
+let animationRunning = false;
+let animationPaused = false;
+let animationRAF = null;
+let animationLastTS = 0;
+let animationAccumulator = 0;
+let animationDrawnLines = [];
+let animationDrawnPoints = [];
+let animationCurrentLine = null;
+let animationLastCoord = null;
+let animationLastDate = null;
+let animationBounds = null;
+let animationHasForeign = false;
+let animationRegionMode = null;      // "TAIWAN" 或 "FOREIGN"
+let animationRegionBounds = null;    // 只記錄目前所在區域，不把臺灣＋美國一起 fit 成世界圖
+let animationRegionLastCoord = null;
+let animationCurrentRouteKey = null;
+let detectedTrips = [];
+let worldFinalMode = false;
+let animationCompletedOnce = false;
+let animationCompleteResolver = null;
+let exportInProgress = false;
 
 // ---------- Timeline parser ----------
 function parseLatLng(value){
@@ -1080,6 +1179,82 @@ travelFilterBtn.onclick=()=>{
 };
 
 
+
+// ---------- Automatic trip detection ----------
+function dateDiffDays(a,b){
+  const A=Date.parse(a+"T00:00:00Z"), B=Date.parse(b+"T00:00:00Z");
+  return Math.round((B-A)/86400000);
+}
+
+function dayHasTaiwanCoordinate(date){
+  return (dateIndex.get(date)||[]).some(f=>{
+    const g=f.geometry||{};
+    if(g.type==="Point"){
+      const c=g.coordinates||[];
+      return c.length>=2 && isTaiwanCoordinate(Number(c[1]),Number(c[0]));
+    }
+    if(g.type==="LineString"){
+      return (g.coordinates||[]).some(c=>c&&c.length>=2&&isTaiwanCoordinate(Number(c[1]),Number(c[0])));
+    }
+    return false;
+  });
+}
+
+function buildDetectedTrips(){
+  const trips=[];
+  if(!foreignDates.length) return trips;
+  let group=[foreignDates[0]];
+  for(let i=1;i<foreignDates.length;i++){
+    const prev=foreignDates[i-1], cur=foreignDates[i];
+    const gap=dateDiffDays(prev,cur);
+    // 只要中間出現明確的「臺灣日」，就視為前一趟已回臺；否則容許少量缺資料日。
+    let taiwanBreak=false;
+    if(gap>1){
+      for(let d=1;d<gap;d++){
+        const t=new Date(Date.parse(prev+"T00:00:00Z")+d*86400000).toISOString().slice(0,10);
+        if(dateIndex.has(t) && dayHasTaiwanCoordinate(t) && !foreignDateSet.has(t)){
+          taiwanBreak=true; break;
+        }
+      }
+    }
+    if(taiwanBreak || gap>3){
+      trips.push(group); group=[cur];
+    }else group.push(cur);
+  }
+  if(group.length) trips.push(group);
+
+  return trips.map((dates,idx)=>{
+    const foreignStart=dates[0], foreignEnd=dates[dates.length-1];
+    const si=dataDates.indexOf(foreignStart), ei=dataDates.indexOf(foreignEnd);
+    let start=foreignStart, end=foreignEnd;
+    if(si>0 && dayHasTaiwanCoordinate(dataDates[si-1])) start=dataDates[si-1];
+    if(ei>=0 && ei<dataDates.length-1 && dayHasTaiwanCoordinate(dataDates[ei+1])) end=dataDates[ei+1];
+    return {id:idx+1,start,end,foreignStart,foreignEnd,days:dates.length};
+  });
+}
+
+function refreshTripSelector(){
+  detectedTrips=buildDetectedTrips();
+  tripSelect.innerHTML="";
+  detectedTrips.forEach((t,i)=>{
+    const opt=document.createElement("option");
+    opt.value=String(i);
+    opt.textContent=`${t.start} ～ ${t.end}（出國 ${t.days} 日）`;
+    tripSelect.appendChild(opt);
+  });
+  if(!detectedTrips.length){
+    const opt=document.createElement("option"); opt.value=""; opt.textContent="沒有偵測到出國旅程"; tripSelect.appendChild(opt);
+  }
+  tripSelect.disabled=!detectedTrips.length;
+}
+
+function syncTripScopeUI(){
+  const on=animationScope.value==="trip";
+  tripSelectLabel.style.display=on?"flex":"none";
+  tripSelect.disabled=!on || !detectedTrips.length;
+}
+animationScope.addEventListener("change",syncTripScopeUI);
+
 // ---------- Map ----------
 function lon2x(lon,z){return(lon+180)/360*Math.pow(2,z)*TILE}
 function lat2y(lat,z){
@@ -1124,6 +1299,7 @@ function renderTiles(){
   tilesEl.innerHTML="";
   tileOK=0;tileBad=0;
   const providersUsed=new Set();
+  const baseMode=currentBaseMapMode();
   const w=mapWrap.clientWidth,h=mapWrap.clientHeight;
   const c=worldCenter();
   const left=c.x-w/2,top=c.y-h/2,n=Math.pow(2,zoom);
@@ -1137,7 +1313,7 @@ function renderTiles(){
     for(let ty=minTY;ty<=maxTY;ty++){
       if(tx<0||tx>=n||ty<0||ty>=n) continue;
 
-      const src=tileSource(zoom,tx,ty);
+      const src=tileSource(zoom,tx,ty,baseMode);
       providersUsed.add(src.provider);
 
       const img=document.createElement("img");
@@ -1153,14 +1329,11 @@ function renderTiles(){
       img.onload=()=>{
         tileOK++;
         if(tileOK>1){
-          const used=[...providersUsed];
-          if(used.includes("NLSC") && used.includes("OSM")){
-            mapStatus.textContent=`混合底圖：臺灣 NLSC ＋ 國外 OSM　Zoom ${zoom}`;
-          }else if(used.includes("NLSC")){
+          if(baseMode==="TAIWAN"){
             const layerName=zoom<=15?"EMAP6_OPENDATA":"EMAP6";
-            mapStatus.textContent=`臺灣底圖：${layerName}　Zoom ${zoom}`;
+            mapStatus.textContent=`臺灣單一底圖：${layerName}　Zoom ${zoom}`;
           }else{
-            mapStatus.textContent=`全球底圖：OpenStreetMap　Zoom ${zoom}`;
+            mapStatus.textContent=`全球單一底圖：OpenStreetMap　Zoom ${zoom}`;
           }
         }
       };
@@ -1178,6 +1351,7 @@ function renderTiles(){
 }
 
 function currentFeatures(){
+  if(animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length) return [];
   if(!selectedDate) return [];
   const arr=dateIndex.get(selectedDate)||[];
   if(showRaw.checked) return arr;
@@ -1190,6 +1364,28 @@ function drawOverlay(){
   hitPoints=[];
 
   const fs=currentFeatures();
+
+  // 動畫完成後的最終世界總覽：全部歷史路線集中在同一張圖，停留在最後畫面。
+  if(worldFinalMode){
+    for(const f of allFeatures){
+      const g=f.geometry||{};
+      if(g.type!=="LineString") continue;
+      const coords=g.coordinates||[];
+      if(coords.length<2) continue;
+      ctx.beginPath();
+      let started=false;
+      for(const c of coords){
+        const q=screenPoint(Number(c[0]),Number(c[1]));
+        if(!started){ctx.moveTo(q.x,q.y);started=true;} else ctx.lineTo(q.x,q.y);
+      }
+      ctx.strokeStyle="#d93025";
+      ctx.lineWidth=3;
+      ctx.lineJoin="round";
+      ctx.lineCap="round";
+      ctx.stroke();
+    }
+    return;
+  }
 
   // routes first
   for(const f of fs){
@@ -1230,11 +1426,193 @@ function drawOverlay(){
 
     hitPoints.push({x:q.x,y:q.y,r:Math.max(9,r+4),feature:f});
   }
+
+  // 累積式歷史動畫圖層：只保留走過的紅色路線；點位不繪製，直到停止/重播。
+  if(animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length){
+    for(const line of animationDrawnLines){
+      if(!line || line.length<2) continue;
+      ctx.beginPath();
+      line.forEach((c,i)=>{
+        const q=screenPoint(c[0],c[1]);
+        if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+      });
+      ctx.strokeStyle="#d93025";
+      ctx.lineWidth=4;
+      ctx.lineJoin="round";
+      ctx.lineCap="round";
+      ctx.stroke();
+    }
+    if(animationCurrentLine && animationCurrentLine.length>=2){
+      ctx.beginPath();
+      animationCurrentLine.forEach((c,i)=>{
+        const q=screenPoint(c[0],c[1]);
+        if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+      });
+      ctx.strokeStyle="#d93025";
+      ctx.lineWidth=4;
+      ctx.lineJoin="round";
+      ctx.lineCap="round";
+      ctx.stroke();
+    }
+  }
 }
 
 function renderMap(){
   renderTiles();
   drawOverlay();
+}
+
+function updateAnimationBounds(coord){
+  if(!coord || coord.length<2) return;
+  const lng=Number(coord[0]), lat=Number(coord[1]);
+  if(!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+  if(!animationBounds){
+    animationBounds={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
+    return;
+  }
+  animationBounds.minLng=Math.min(animationBounds.minLng,lng);
+  animationBounds.maxLng=Math.max(animationBounds.maxLng,lng);
+  animationBounds.minLat=Math.min(animationBounds.minLat,lat);
+  animationBounds.maxLat=Math.max(animationBounds.maxLat,lat);
+}
+
+function applyBoundsView(bounds,minZoom=ANIMATION_MIN_ZOOM,maxZoom=MAX_ZOOM,padding=.82){
+  if(!bounds) return;
+  const {minLng,maxLng,minLat,maxLat}=bounds;
+  center={lat:(minLat+maxLat)/2,lng:(minLng+maxLng)/2};
+  let best=minZoom;
+  for(let z=maxZoom;z>=minZoom;z--){
+    const dx=Math.abs(lon2x(maxLng,z)-lon2x(minLng,z));
+    const dy=Math.abs(lat2y(minLat,z)-lat2y(maxLat,z));
+    if(dx<=mapWrap.clientWidth*padding && dy<=mapWrap.clientHeight*padding){
+      best=z;
+      break;
+    }
+  }
+  zoom=best;
+}
+
+function setTaiwanAnimationView(){
+  // 臺灣動畫固定以「完整臺灣本島」為畫面主體，不追著定位點縮放。
+  // 由於地圖採整數 Zoom，優先確保南北完整呈現；左右多出的區域仍使用同一套 NLSC 底圖，不再混入 OSM。
+  applyBoundsView({minLng:119.9,maxLng:122.15,minLat:21.8,maxLat:25.5},7,9,.96);
+}
+
+function haversineKm(a,b){
+  if(!a || !b) return 0;
+  const R=6371;
+  const lat1=Number(a[1])*Math.PI/180, lat2=Number(b[1])*Math.PI/180;
+  const dLat=lat2-lat1;
+  const dLon=(Number(b[0])-Number(a[0]))*Math.PI/180;
+  const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
+}
+
+function resetRegionBounds(coord){
+  if(!coord) return;
+  const lng=Number(coord[0]), lat=Number(coord[1]);
+  animationRegionBounds={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
+}
+
+function extendRegionBounds(coord){
+  if(!coord) return;
+  const lng=Number(coord[0]), lat=Number(coord[1]);
+  if(!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+  if(!animationRegionBounds){ resetRegionBounds(coord); return; }
+  animationRegionBounds.minLng=Math.min(animationRegionBounds.minLng,lng);
+  animationRegionBounds.maxLng=Math.max(animationRegionBounds.maxLng,lng);
+  animationRegionBounds.minLat=Math.min(animationRegionBounds.minLat,lat);
+  animationRegionBounds.maxLat=Math.max(animationRegionBounds.maxLat,lat);
+}
+
+function setForeignAnimationView(coord){
+  // 國外不再把臺灣一起塞進鏡頭，而是只看「目前這一段國外行程」。
+  // 初抵達時先給較大的當地視野；之後隨該區域實際移動範圍自動調整。
+  if(!animationRegionBounds) resetRegionBounds(coord);
+  const b=animationRegionBounds;
+  const spanLng=Math.abs(b.maxLng-b.minLng);
+  const spanLat=Math.abs(b.maxLat-b.minLat);
+  if(spanLng<0.35 && spanLat<0.35){
+    center={lat:Number(coord[1]),lng:Number(coord[0])};
+    zoom=8;
+    return;
+  }
+  applyBoundsView(b,4,10,.74);
+}
+
+function updateAnimationCamera(item){
+  if(!animationFollow.checked || !item || !item.coord) return;
+  const lng=Number(item.coord[0]), lat=Number(item.coord[1]);
+  if(!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+  updateAnimationBounds(item.coord);
+  const inTaiwan=isTaiwanCoordinate(lat,lng);
+  const nextMode=inTaiwan ? "TAIWAN" : "FOREIGN";
+
+  if(animationRegionMode!==nextMode){
+    animationRegionMode=nextMode;
+    animationRegionBounds=null;
+    animationRegionLastCoord=null;
+    if(inTaiwan){
+      setTaiwanAnimationView();
+    }else{
+      resetRegionBounds(item.coord);
+      setForeignAnimationView(item.coord);
+    }
+    animationRegionLastCoord=item.coord;
+    return;
+  }
+
+  if(inTaiwan){
+    setTaiwanAnimationView();
+    animationRegionLastCoord=item.coord;
+    return;
+  }
+
+  const jumpKm=haversineKm(animationRegionLastCoord,item.coord);
+  // 國外鏡頭採區域式切換：近距離維持、區域移動適度擴大、長距離直接切新區。
+  if(jumpKm>1200){
+    resetRegionBounds(item.coord);
+  }else if(jumpKm>300){
+    extendRegionBounds(item.coord);
+  }else{
+    extendRegionBounds(item.coord);
+  }
+  setForeignAnimationView(item.coord);
+  animationRegionLastCoord=item.coord;
+}
+
+function getAllRouteBounds(){
+  let b=null;
+  for(const f of allFeatures){
+    const g=f.geometry||{};
+    if(g.type!=="LineString") continue;
+    for(const c of g.coordinates||[]){
+      if(!c || c.length<2) continue;
+      const lng=Number(c[0]), lat=Number(c[1]);
+      if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+      if(!b) b={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
+      else{
+        b.minLng=Math.min(b.minLng,lng); b.maxLng=Math.max(b.maxLng,lng);
+        b.minLat=Math.min(b.minLat,lat); b.maxLat=Math.max(b.maxLat,lat);
+      }
+    }
+  }
+  return b;
+}
+
+function showWorldFinalView(){
+  worldFinalMode=true;
+  const b=getAllRouteBounds();
+  if(b){
+    // 最終圖以所有實際路線為範圍，允許縮至世界尺度，但不比必要範圍更小。
+    applyBoundsView(b,1,7,.88);
+  }else{
+    center={lat:15,lng:0};
+    zoom=2;
+  }
+  renderMap();
+  mapStatus.textContent="最終世界路線總覽｜全部歷史紅線";
 }
 
 function fitFeatures(fs){
@@ -1391,6 +1769,426 @@ showRaw.onchange=()=>{if(selectedDate) renderSelectedDate()};
 
 window.addEventListener("resize",()=>{if(selectedDate) renderMap()});
 
+// ---------- History animation helpers ----------
+function featureSortTime(f){
+  const p=f.properties||{};
+  const v=p.start_time||p.end_time||p.time||p.timestamp||"";
+  const t=Date.parse(v);
+  return Number.isFinite(t)?t:0;
+}
+
+function getAnimationSourceFeatures(){
+  const scope=animationScope.value;
+  if(!dataDates.length) return [];
+  if(scope==="day") return selectedDate ? (dateIndex.get(selectedDate)||[]) : [];
+  if(scope==="trip"){
+    const t=detectedTrips[Number(tripSelect.value)];
+    if(!t) return [];
+    return allFeatures.filter(f=>{
+      const d=featureDate(f);
+      return d && d>=t.start && d<=t.end;
+    });
+  }
+  if(scope==="month"){
+    const key=`${calendarYear}-${String(calendarMonth+1).padStart(2,"0")}`;
+    return allFeatures.filter(f=>featureDate(f).slice(0,7)===key);
+  }
+  if(scope==="foreign"){
+    return allFeatures.filter(f=>foreignDateSet.has(featureDate(f)));
+  }
+  return [...allFeatures];
+}
+
+function makeAnimationItems(features){
+  const items=[];
+  const sorted=[...features].sort((a,b)=>featureSortTime(a)-featureSortTime(b));
+  for(const f of sorted){
+    const g=f.geometry||{};
+    const p=f.properties||{};
+    const baseTime=featureSortTime(f);
+    if(g.type==="Point"){
+      const c=g.coordinates||[];
+      if(c.length>=2){
+        items.push({kind:"point",coord:[+c[0],+c[1]],type:p.type||"raw_signal",feature:f,time:baseTime,date:featureDate(f)});
+      }
+    }else if(g.type==="LineString"){
+      const coords=(g.coordinates||[]).filter(c=>c&&c.length>=2).map(c=>[+c[0],+c[1]]);
+      if(coords.length>=2){
+        const endTime=Date.parse(p.end_time||"");
+        const span=Number.isFinite(endTime)&&endTime>baseTime ? endTime-baseTime : Math.max(1000,coords.length*1000);
+        coords.forEach((c,i)=>{
+          items.push({kind:"route",coord:c,type:p.type||"timeline_route",feature:f,
+            time:baseTime+(span*(i/Math.max(1,coords.length-1))),date:featureDate(f),routeKey:f});
+        });
+      }
+    }
+  }
+  items.sort((a,b)=>a.time-b.time);
+  return items;
+}
+
+function resetAnimationDrawing(clearUI=true){
+  worldFinalMode=false;
+  if(animationRAF) cancelAnimationFrame(animationRAF);
+  animationRAF=null;
+  animationRunning=false;
+  animationPaused=false;
+  animationIndex=0;
+  animationLastTS=0;
+  animationAccumulator=0;
+  animationDrawnLines=[];
+  animationDrawnPoints=[];
+  animationCurrentLine=null;
+  animationLastCoord=null;
+  animationLastDate=null;
+  animationBounds=null;
+  animationHasForeign=false;
+  animationRegionMode=null;
+  animationRegionBounds=null;
+  animationRegionLastCoord=null;
+  animationCurrentRouteKey=null;
+  if(clearUI){
+    animationProgress.value=0;
+    animationProgress.disabled=true;
+    animationStartLabel.textContent="—";
+    animationNow.textContent="尚未播放";
+    animationCompletedOnce=false;
+    exportBothBtn.disabled=true;
+    exportStatus.textContent="動畫播放完成後即可匯出 WebM＋PNG";
+  }
+  playHistoryBtn.textContent="▶ 歷史動畫";
+  pauseHistoryBtn.textContent="⏸ 暫停";
+  pauseHistoryBtn.disabled=true;
+  stopHistoryBtn.disabled=true;
+  renderMap();
+}
+
+function syncAnimationDate(item){
+  if(!item.date || item.date===animationLastDate || !dateIndex.has(item.date)) return;
+  animationLastDate=item.date;
+  selectedDate=item.date;
+  const d=new Date(item.date+"T00:00:00");
+  calendarYear=d.getFullYear();
+  calendarMonth=d.getMonth();
+  currentDateEl.textContent=item.date;
+  renderCalendar();
+  updateDayNav();
+}
+
+function shouldBridgeMissingRoute(fromCoord,toCoord,item){
+  if(!fromCoord || !toCoord || item.kind==="route") return false;
+  const km=haversineKm(fromCoord,toCoord);
+  if(km<80) return false;
+
+  const fromTaiwan=isTaiwanCoordinate(Number(fromCoord[1]),Number(fromCoord[0]));
+  const toTaiwan=isTaiwanCoordinate(Number(toCoord[1]),Number(toCoord[0]));
+
+  // 臺灣 ↔ 國外：無論距離，若中間沒有 route 都直接補線。
+  if(fromTaiwan!==toTaiwan) return true;
+
+  // 國外不同區域或長距離跳點：視為缺少飛行／移動紀錄，補一直線。
+  // 800 km 可涵蓋多數跨國飛行，同時避免一般市區移動被誤補。
+  return km>=800;
+}
+
+function bridgeMissingRoute(fromCoord,toCoord){
+  if(!fromCoord || !toCoord) return;
+  if(animationCurrentLine && animationCurrentLine.length>=2){
+    animationDrawnLines.push(animationCurrentLine);
+  }
+  animationCurrentLine=null;
+  animationCurrentRouteKey=null;
+  animationDrawnLines.push([
+    [Number(fromCoord[0]),Number(fromCoord[1])],
+    [Number(toCoord[0]),Number(toCoord[1])]
+  ]);
+}
+
+function consumeAnimationItem(item){
+  const previousCoord=animationLastCoord ? [animationLastCoord[0],animationLastCoord[1]] : null;
+
+  // 若跨國／回臺途中沒有任何時間軸路線，直接以兩個有效定位點補一條紅色直線。
+  if(previousCoord && shouldBridgeMissingRoute(previousCoord,item.coord,item)){
+    bridgeMissingRoute(previousCoord,item.coord);
+  }
+
+  if(item.kind==="route"){
+    // 以真正的 route feature 分段，不再因為跨海距離大就把航線切斷。
+    // 若 JSON 本身有 route 就依 route 畫；若跨國缺 route，會由前後有效定位點自動補直線。
+    if(!animationCurrentLine || animationCurrentRouteKey!==item.routeKey){
+      if(animationCurrentLine && animationCurrentLine.length>=2) animationDrawnLines.push(animationCurrentLine);
+      animationCurrentLine=[item.coord];
+      animationCurrentRouteKey=item.routeKey;
+    }else{
+      animationCurrentLine.push(item.coord);
+    }
+  }else{
+    // 歷史動畫不顯示任何停留點／起訖點／Raw 點；
+    // 點資料只用來判斷目前位置、日期、鏡頭與缺漏跨國連線。
+  }
+  animationLastCoord=item.coord;
+  syncAnimationDate(item);
+  updateAnimationCamera(item);
+}
+
+function updateAnimationUI(){
+  const total=Math.max(1,animationItems.length-1);
+  animationProgress.value=Math.round((animationIndex/total)*1000);
+  const item=animationItems[Math.min(animationIndex,animationItems.length-1)];
+  if(item){
+    const d=new Date(item.time);
+    const stamp=Number.isFinite(d.getTime()) ? d.toLocaleString("zh-TW",{hour12:false}) : (item.date||"");
+    animationNow.textContent=stamp;
+  }
+}
+
+function animationStep(ts){
+  if(!animationRunning || animationPaused) return;
+  if(!animationLastTS) animationLastTS=ts;
+  const dt=Math.min(100,ts-animationLastTS);
+  animationLastTS=ts;
+  const speed=Number(animationSpeed.value)||1;
+  animationAccumulator += dt*speed;
+
+  // 以畫面更新量推進資料；速度越高，每幀消化越多項目。
+  const interval=28;
+  let changed=false;
+  while(animationAccumulator>=interval && animationIndex<animationItems.length){
+    animationAccumulator-=interval;
+    consumeAnimationItem(animationItems[animationIndex]);
+    animationIndex++;
+    changed=true;
+    if(speed<=1) break;
+  }
+  if(changed){
+    updateAnimationUI();
+    renderMap();
+  }
+  if(animationIndex>=animationItems.length){
+    if(animationCurrentLine && animationCurrentLine.length>=2){
+      animationDrawnLines.push(animationCurrentLine);
+      animationCurrentLine=null;
+    }
+    animationRunning=false;
+    animationPaused=false;
+    playHistoryBtn.textContent="↻ 重新播放";
+    pauseHistoryBtn.disabled=true;
+    stopHistoryBtn.disabled=false;
+    animationProgress.value=1000;
+    animationNow.textContent="播放完成｜最終世界總覽";
+    animationCompletedOnce=true;
+    showWorldFinalView();
+    exportBothBtn.disabled=exportInProgress;
+    exportStatus.textContent="已完成，可產生動畫 WebM 與世界路線 PNG";
+    if(animationCompleteResolver){
+      const resolve=animationCompleteResolver;
+      animationCompleteResolver=null;
+      resolve();
+    }
+    return;
+  }
+  animationRAF=requestAnimationFrame(animationStep);
+}
+
+function startHistoryAnimation(){
+  worldFinalMode=false;
+  const source=getAnimationSourceFeatures();
+  animationItems=makeAnimationItems(source);
+  if(!animationItems.length){
+    alert("目前範圍沒有可播放的時間軸資料。");
+    return;
+  }
+  resetAnimationDrawing(false);
+  animationItems=makeAnimationItems(source);
+  animationProgress.disabled=false;
+  animationStartLabel.textContent=animationItems[0].date||"開始";
+  animationNow.textContent="準備播放";
+  animationRunning=true;
+  animationPaused=false;
+  const firstCoord=animationItems[0]?.coord;
+  if(firstCoord && isTaiwanCoordinate(Number(firstCoord[1]),Number(firstCoord[0]))){
+    setTaiwanAnimationView();
+  }
+  playHistoryBtn.textContent="↻ 重新播放";
+  pauseHistoryBtn.disabled=false;
+  stopHistoryBtn.disabled=false;
+  animationRAF=requestAnimationFrame(animationStep);
+}
+
+playHistoryBtn.onclick=()=>startHistoryAnimation();
+pauseHistoryBtn.onclick=()=>{
+  if(!animationRunning) return;
+  animationPaused=!animationPaused;
+  pauseHistoryBtn.textContent=animationPaused?"▶ 繼續":"⏸ 暫停";
+  if(!animationPaused){
+    animationLastTS=0;
+    animationRAF=requestAnimationFrame(animationStep);
+  }
+};
+stopHistoryBtn.onclick=()=>resetAnimationDrawing(true);
+
+animationProgress.addEventListener("input",()=>{
+  if(!animationItems.length) return;
+  const target=Math.max(0,Math.min(animationItems.length-1,Math.round((Number(animationProgress.value)/1000)*(animationItems.length-1))));
+  const wasRunning=animationRunning;
+  animationRunning=false;
+  if(animationRAF) cancelAnimationFrame(animationRAF);
+  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCurrentRouteKey=null;
+  animationIndex=0;
+  for(let i=0;i<=target;i++){
+    consumeAnimationItem(animationItems[i]);
+    animationIndex=i+1;
+  }
+  updateAnimationUI();
+  renderMap();
+  if(wasRunning && !animationPaused && animationIndex<animationItems.length){
+    animationRunning=true;
+    animationLastTS=0;
+    animationRAF=requestAnimationFrame(animationStep);
+  }
+});
+
+// ---------- Export: animation WebM + final world PNG ----------
+function preferredRecorderMime(){
+  const list=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+  for(const m of list){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return "";
+}
+
+function safeFileStem(){
+  const name=(fileInput.files&&fileInput.files[0]&&fileInput.files[0].name)||"timeline";
+  return name.replace(/\.[^.]+$/,"").replace(/[\\/:*?"<>|]+/g,"_");
+}
+
+function downloadBlob(blob,filename){
+  const a=document.createElement("a");
+  const url=URL.createObjectURL(blob);
+  a.href=url;
+  a.download=filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),30000);
+}
+
+function waitMs(ms){return new Promise(r=>setTimeout(r,ms));}
+
+async function waitVideoReady(video){
+  if(video.readyState>=2 && video.videoWidth) return;
+  await new Promise((resolve,reject)=>{
+    const done=()=>{cleanup();resolve();};
+    const fail=()=>{cleanup();reject(new Error("無法讀取螢幕擷取畫面"));};
+    const cleanup=()=>{video.removeEventListener("loadeddata",done);video.removeEventListener("error",fail);};
+    video.addEventListener("loadeddata",done,{once:true});
+    video.addEventListener("error",fail,{once:true});
+  });
+}
+
+async function captureMapPngFromStream(stream){
+  showWorldFinalView();
+  await waitMs(900);
+  const video=document.createElement("video");
+  video.muted=true;
+  video.playsInline=true;
+  video.srcObject=stream;
+  video.style.position="fixed";
+  video.style.left="-99999px";
+  document.body.appendChild(video);
+  await video.play();
+  await waitVideoReady(video);
+  await waitMs(250);
+
+  const vw=video.videoWidth, vh=video.videoHeight;
+  if(!vw || !vh) throw new Error("擷取解析度無效");
+
+  // capture-clean 時地圖就是整個內容視窗，因此直接擷取完整分頁畫面即可得到純地圖。
+  const out=document.createElement("canvas");
+  out.width=vw;
+  out.height=vh;
+  const octx=out.getContext("2d");
+  octx.drawImage(video,0,0,vw,vh);
+  video.pause();
+  video.srcObject=null;
+  video.remove();
+  return await new Promise((resolve,reject)=>out.toBlob(b=>b?resolve(b):reject(new Error("PNG 產生失敗")),"image/png"));
+}
+
+async function replayForExport(){
+  return new Promise((resolve,reject)=>{
+    animationCompleteResolver=resolve;
+    try{ startHistoryAnimation(); }
+    catch(err){ animationCompleteResolver=null; reject(err); }
+  });
+}
+
+async function exportAnimationAndWorld(){
+  if(exportInProgress || !animationCompletedOnce) return;
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+    alert("此瀏覽器不支援分頁錄製。請使用最新版 Chrome 或 Edge。");
+    return;
+  }
+  if(!window.MediaRecorder){
+    alert("此瀏覽器不支援 WebM 錄影輸出。");
+    return;
+  }
+
+  exportInProgress=true;
+  exportBothBtn.disabled=true;
+  exportStatus.textContent="請在瀏覽器視窗選擇『目前這個分頁』，系統會自動重播並產生兩個檔案…";
+
+  let stream=null;
+  let recorder=null;
+  try{
+    stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false});
+    const mime=preferredRecorderMime();
+    const chunks=[];
+    recorder=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:6000000}:{videoBitsPerSecond:6000000});
+    recorder.addEventListener("dataavailable",e=>{if(e.data&&e.data.size) chunks.push(e.data);});
+    const stopped=new Promise((resolve,reject)=>{
+      recorder.addEventListener("stop",resolve,{once:true});
+      recorder.addEventListener("error",()=>reject(new Error("動畫錄製失敗")),{once:true});
+    });
+
+    document.body.classList.add("capture-clean");
+    await waitMs(350);
+    recorder.start(1000);
+    exportStatus.textContent="正在錄製歷史動畫…請勿切換分頁";
+    await replayForExport();
+
+    // 最後世界總覽多停留 2 秒，讓影片結尾清楚停在總覽圖。
+    await waitMs(2000);
+    const pngBlob=await captureMapPngFromStream(stream);
+
+    recorder.stop();
+    await stopped;
+    const videoBlob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});
+    const stem=safeFileStem();
+    downloadBlob(videoBlob,`${stem}_歷史動畫.webm`);
+    await waitMs(250);
+    downloadBlob(pngBlob,`${stem}_最終世界路線圖.png`);
+    exportStatus.textContent="完成：已產生歷史動畫 WebM＋最終世界路線 PNG";
+  }catch(err){
+    console.error(err);
+    exportStatus.textContent="匯出失敗："+(err&&err.message?err.message:String(err));
+    alert("匯出失敗："+(err&&err.message?err.message:String(err))+"\n\n請確認螢幕分享時選擇『目前這個分頁』。");
+  }finally{
+    if(recorder && recorder.state!=="inactive"){
+      try{recorder.stop();}catch(_e){}
+    }
+    if(stream){
+      for(const t of stream.getTracks()) try{t.stop();}catch(_e){}
+    }
+    document.body.classList.remove("capture-clean");
+    exportInProgress=false;
+    exportBothBtn.disabled=!animationCompletedOnce;
+    showWorldFinalView();
+  }
+}
+
+exportBothBtn.addEventListener("click",exportAnimationAndWorld);
+
 // ---------- Sidebar auto positioning ----------
 function positionSidebarForCalendar(){
   if(!sidebar || !fileBox || !dayNav) return;
@@ -1454,6 +2252,7 @@ fileInput.addEventListener("change",async e=>{
       throw new Error("沒有解析到 semanticSegments、timelineObjects 或 rawSignals 的定位資料。");
     }
 
+    resetAnimationDrawing(true);
     allFeatures=parsed.features;
     dateIndex=buildDateIndex(allFeatures);
     dataDates=[...dateIndex.keys()].sort();
@@ -1463,6 +2262,8 @@ fileInput.addEventListener("change",async e=>{
     travelFilterBtn.classList.remove("active");
     travelFilterBtn.textContent="出國日";
     travelCount.textContent=`出國日：${foreignDates.length.toLocaleString()} 天`;
+    refreshTripSelector();
+    syncTripScopeUI();
 
     if(!dataDates.length){
       throw new Error("時間軸中沒有可辨識的日期。");
