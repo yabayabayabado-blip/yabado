@@ -267,6 +267,10 @@ button{cursor:pointer}
 .animbar label{font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center}
 .speed-slider-label{min-width:250px}
 .speed-slider-label input[type=range]{width:170px;accent-color:var(--accent)}
+.km-counter{display:flex;align-items:baseline;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;white-space:nowrap}
+.km-counter .km-label{font-size:12px;color:var(--muted)}
+.km-counter .km-value{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;color:#b3261e;min-width:92px;text-align:right}
+.km-counter .km-unit{font-size:12px;color:var(--muted)}
 .speed-value{min-width:42px;text-align:right;font-weight:800;color:#174ea6;font-variant-numeric:tabular-nums}
 .anim-progress{display:grid;grid-template-columns:auto minmax(140px,1fr) auto;gap:8px;align-items:center;width:100%;font-size:12px;color:var(--muted)}
 .anim-progress input[type=range]{width:100%}
@@ -443,9 +447,14 @@ body.capture-clean .mapStatus{bottom:28px}
         <select id="tripSelect" disabled></select>
       </label>
       <label class="speed-slider-label">速度
-        <input id="animationSpeed" type="range" min="0" max="13" step="1" value="1" aria-label="動畫播放速度">
-        <span id="animationSpeedValue" class="speed-value">1×</span>
+        <input id="animationSpeed" type="range" min="0" max="14" step="1" value="5" aria-label="動畫播放速度（鏡頭速度獨立）">
+        <span id="animationSpeedValue" class="speed-value">10×</span>
       </label>
+      <div class="km-counter" title="依動畫目前已走過的連續軌跡累計">
+        <span class="km-label">累積路線</span>
+        <span id="animationKmValue" class="km-value">0.0</span>
+        <span class="km-unit">km</span>
+      </div>
       <label><input id="animationFollow" type="checkbox" checked> 自動跟隨</label>
       <div class="anim-progress">
         <span id="animationStartLabel">—</span>
@@ -462,7 +471,6 @@ body.capture-clean .mapStatus{bottom:28px}
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
     </div>
-    <div class="legend">— 藍：單日移動路線　｜　歷史動畫：紅色標點沿路線前進；新線最深、舊線逐漸變淡但永不消失｜跨國缺少路線時自動補紅色直線｜小範圍自動放大／大範圍自動拉遠／跨國自動切鏡　｜　臺灣單一 NLSC 底圖 ｜ 跨國自動切換 OSM ｜ 最大 Zoom 19</div>
 
     <div id="mapWrap">
       <div id="tiles"></div>
@@ -574,6 +582,7 @@ const tripSelectLabel = $("tripSelectLabel");
 const tripSelect = $("tripSelect");
 const animationSpeed = $("animationSpeed");
 const animationSpeedValue = $("animationSpeedValue");
+const animationKmValue = $("animationKmValue");
 const animationFollow = $("animationFollow");
 const animationProgress = $("animationProgress");
 const animationStartLabel = $("animationStartLabel");
@@ -618,6 +627,26 @@ let animationRegionMode = null;      // "TAIWAN" 或 "FOREIGN"
 let animationRegionBounds = null;    // 只記錄目前所在區域，不把臺灣＋美國一起 fit 成世界圖
 let animationRegionLastCoord = null;
 let animationCameraTrail = []; // 近期移動座標，用來依移動尺度自動縮放
+let cameraLastRealUpdate = 0;          // 鏡頭更新採真實時間節流，不跟播放倍速同步
+let cameraLastZoomChange = 0;          // 縮放變更後暫時鎖定，避免忽大忽小
+let cameraCurrentBand = null;          // 固定縮放級別，避免門檻附近來回跳動
+let animationSpeedManuallyChanged = false; // 使用者一旦手動調倍速，就停止臺灣自動 10×
+let animationDisplayCoord = null;         // 連續移動模式下的平滑顯示位置
+let animationTweenFrom = null;            // 連續平滑移動起點
+let animationTweenTo = null;              // 連續平滑移動終點
+let animationTweenProgress = 1;           // 0~1，1 表示沒有進行中的平滑移動
+let animationWaterTrail = [];             // 連續移動模式的短暫水痕尾巴
+let animationRouteKm = 0;                 // 已完成／已提交的累積路線公里數
+let animationDisplayKm = 0;               // 畫面上顯示的累進公里數
+let animationTweenKmStart = 0;            // 連續平滑移動時公里數起點
+let animationTweenKmEnd = 0;              // 連續平滑移動時公里數終點
+let animationPendingCrossDayBridge = null; // 跨日缺口：等標點實際走到終點後才提交補線
+let animationTweenDuration = 180;           // 本段連續移動時間，短距 2×較快；跨日長距離另行計算
+let animationPreflightTimer = null;        // 開播前鏡頭／底圖緩衝計時器
+const CAMERA_UPDATE_MS = 1200;         // 鏡頭最多約 1.2 秒更新一次
+const CAMERA_ZOOM_LOCK_MS = 3200;      // Zoom 變更後至少 3.2 秒不再變焦
+const CAMERA_SAFE_X = 0.66;            // 標點位於中央 66% 安全框時不平移
+const CAMERA_SAFE_Y = 0.62;            // 垂直安全框稍小，避免上下頻繁追焦
 let animationCurrentRouteKey = null;
 let animationSyntheticLines = []; // 缺漏的跨國／長距離移動自動補線，亦保留到最終世界圖
 let detectedTrips = [];
@@ -625,6 +654,14 @@ let worldFinalMode = false;
 let animationCompletedOnce = false;
 let animationCompleteResolver = null;
 let exportInProgress = false;
+const FINAL_WORLD_ROUTE_COLOR = "#d93025";
+let taiwanDayPlans = new Map();
+let cachedAllAnimationItems = [];
+let cachedInitialPreflight = null;
+let taiwanForcedWideUntilTime = 0; // 開場預判為長距離時，鎖定全臺視角直到預判窗結束，避免被前段小移動立刻拉回 Zoom 14
+let taiwanCameraMode = null; // "SMALL" / "WIDE"，臺灣只允許這兩種鏡頭，切換時直接跳到目標，不經中間 Zoom
+const INITIAL_LOOKAHEAD_MS = 24*60*60*1000; // 從動畫第一筆往後預看 24 小時，不受午夜切日影響
+let currentTaiwanPlanDayKey = "";
 
 // ---------- Timeline parser ----------
 function parseLatLng(value){
@@ -1379,7 +1416,7 @@ function drawOverlay(){
         const q=screenPoint(Number(c[0]),Number(c[1]));
         if(!started){ctx.moveTo(q.x,q.y);started=true;} else ctx.lineTo(q.x,q.y);
       }
-      ctx.strokeStyle="#d93025";
+      ctx.strokeStyle=FINAL_WORLD_ROUTE_COLOR;
       ctx.lineWidth=3;
       ctx.lineJoin="round";
       ctx.lineCap="round";
@@ -1393,7 +1430,7 @@ function drawOverlay(){
         const q=screenPoint(Number(c[0]),Number(c[1]));
         if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
       });
-      ctx.strokeStyle="#d93025";
+      ctx.strokeStyle=FINAL_WORLD_ROUTE_COLOR;
       ctx.lineWidth=3;
       ctx.lineJoin="round";
       ctx.lineCap="round";
@@ -1447,23 +1484,47 @@ function drawOverlay(){
   // 3) 畫面最前端以紅色標點顯示目前動畫位置。
   if(animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length){
     const totalLines=animationDrawnLines.length;
+
+    // 歷史線改成 128 階「連續漸層」：依全部已完成路線的時間排序平均分配色階。
+    // 這樣不會因為歷史越長，絕大多數路線都被塞進同一個最淡色階。
+    // 同一色階合併成單一路徑一次繪製，兼顧大量歷史資料時的效能。
+    const HISTORY_GRADIENT_STEPS=128;
+    const gradientLines=Array.from({length:HISTORY_GRADIENT_STEPS},()=>[]);
+    const oldRGB=[247,216,213];   // 最舊：淺紅，仍清楚可見
+    const newRGB=[179,38,30];     // 最新：深紅
+    const mixColor=(a,b,t)=>{
+      const r=Math.round(a[0]+(b[0]-a[0])*t);
+      const g=Math.round(a[1]+(b[1]-a[1])*t);
+      const bl=Math.round(a[2]+(b[2]-a[2])*t);
+      return `rgb(${r},${g},${bl})`;
+    };
+
     for(let lineIndex=0; lineIndex<totalLines; lineIndex++){
       const line=animationDrawnLines[lineIndex];
       if(!line || line.length<2) continue;
+      const recency=totalLines<=1?1:(lineIndex/(totalLines-1));
+      // 平均分散到 128 階；稍微壓低最淡端，讓中段也保有足夠紅色差異。
+      const eased=Math.pow(recency,0.82);
+      const gi=Math.max(0,Math.min(HISTORY_GRADIENT_STEPS-1,Math.round(eased*(HISTORY_GRADIENT_STEPS-1))));
+      gradientLines[gi].push(line);
+    }
 
-      // oldest = 0.16，newest completed = 0.82；永遠不低於 0.16。
-      const ageRatio=totalLines<=1 ? 1 : lineIndex/(totalLines-1);
-      const alpha=0.16 + 0.66*Math.pow(ageRatio,0.72);
-
+    // 由舊到新依序畫，最新路線自然覆蓋在最上層。
+    for(let gi=0;gi<HISTORY_GRADIENT_STEPS;gi++){
+      const lines=gradientLines[gi];
+      if(!lines.length) continue;
+      const t=gi/(HISTORY_GRADIENT_STEPS-1);
       ctx.save();
-      ctx.globalAlpha=alpha;
+      ctx.globalAlpha=1;
       ctx.beginPath();
-      line.forEach((c,i)=>{
-        const q=screenPoint(c[0],c[1]);
-        if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
-      });
-      ctx.strokeStyle="#d93025";
-      ctx.lineWidth=4;
+      for(const line of lines){
+        line.forEach((c,i)=>{
+          const q=screenPoint(c[0],c[1]);
+          if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
+        });
+      }
+      ctx.strokeStyle=mixColor(oldRGB,newRGB,t);
+      ctx.lineWidth=3.25+1.15*t;
       ctx.lineJoin="round";
       ctx.lineCap="round";
       ctx.stroke();
@@ -1479,17 +1540,54 @@ function drawOverlay(){
         const q=screenPoint(c[0],c[1]);
         if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
       });
-      ctx.strokeStyle="#d93025";
-      ctx.lineWidth=4.5;
+      ctx.strokeStyle="#b3261e";
+      ctx.lineWidth=4.7;
       ctx.lineJoin="round";
       ctx.lineCap="round";
       ctx.stroke();
       ctx.restore();
     }
 
-    // 目前位置標點：只有一顆會跟著動畫移動，不保留歷史點位。
-    if(animationLastCoord){
-      const q=screenPoint(animationLastCoord[0],animationLastCoord[1]);
+    // 連續移動模式的「水痕」：只保留最近一小段半透明移動尾巴，不會形成永久點位。
+    if(animationWaterTrail.length>=2){
+      for(let i=1;i<animationWaterTrail.length;i++){
+        const a=animationWaterTrail[i-1], b=animationWaterTrail[i];
+        const qa=screenPoint(a.coord[0],a.coord[1]);
+        const qb=screenPoint(b.coord[0],b.coord[1]);
+        const ratio=i/Math.max(1,animationWaterTrail.length-1);
+        ctx.save();
+        ctx.globalAlpha=0.05+0.32*ratio;
+        ctx.strokeStyle="#d93025";
+        ctx.lineWidth=2+4*ratio;
+        ctx.lineCap="round";
+        ctx.beginPath();
+        ctx.moveTo(qa.x,qa.y);
+        ctx.lineTo(qb.x,qb.y);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // 連續移動時正在前進中的部分線段也連續畫出，不等到下一筆才突然出現。
+    if(animationTweenFrom && animationDisplayCoord && animationTweenProgress<1){
+      const qa=screenPoint(animationTweenFrom[0],animationTweenFrom[1]);
+      const qb=screenPoint(animationDisplayCoord[0],animationDisplayCoord[1]);
+      ctx.save();
+      ctx.globalAlpha=.98;
+      ctx.strokeStyle="#b3261e";
+      ctx.lineWidth=4.7;
+      ctx.lineCap="round";
+      ctx.beginPath();
+      ctx.moveTo(qa.x,qa.y);
+      ctx.lineTo(qb.x,qb.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 目前位置標點：只有一顆，連續移動時採連續插值位置，不會一筆一筆瞬移。
+    const markerCoord=animationDisplayCoord||animationLastCoord;
+    if(markerCoord){
+      const q=screenPoint(markerCoord[0],markerCoord[1]);
       ctx.save();
       ctx.shadowColor="rgba(0,0,0,.28)";
       ctx.shadowBlur=7;
@@ -1506,8 +1604,20 @@ function drawOverlay(){
   }
 }
 
-function renderMap(){
-  renderTiles();
+let lastTileViewSignature="";
+function renderMap(forceTiles=false){
+  // 動畫每一幀只重畫 Canvas 路線；只有底圖來源、Zoom、中心或尺寸真的改變時才重建圖磚。
+  // 舊版每幀都刪掉再建立全部圖磚，在 50×／100× 時會造成大量 DOM 與網路負擔，
+  // 也是高倍速實際播放仍非常慢的主要原因之一。
+  const sig=[
+    currentBaseMapMode(),zoom,
+    Number(center.lat).toFixed(5),Number(center.lng).toFixed(5),
+    mapWrap.clientWidth,mapWrap.clientHeight
+  ].join("|");
+  if(forceTiles || sig!==lastTileViewSignature){
+    lastTileViewSignature=sig;
+    renderTiles();
+  }
   drawOverlay();
 }
 
@@ -1541,10 +1651,12 @@ function applyBoundsView(bounds,minZoom=ANIMATION_MIN_ZOOM,maxZoom=MAX_ZOOM,padd
   zoom=best;
 }
 
+const TAIWAN_FULL_BOUNDS = {minLng:119.65,maxLng:122.20,minLat:21.75,maxLat:25.45};
 function setTaiwanAnimationView(){
-  // 臺灣動畫固定以「完整臺灣本島」為畫面主體，不追著定位點縮放。
-  // 由於地圖採整數 Zoom，優先確保南北完整呈現；左右多出的區域仍使用同一套 NLSC 底圖，不再混入 OSM。
-  applyBoundsView({minLng:119.9,maxLng:122.15,minLat:21.8,maxLat:25.5},7,9,.96);
+  // 臺灣長距離模式固定顯示完整臺灣，而且上下保留安全邊界。
+  // 不再硬鎖 Zoom 8：視窗高度足夠時使用 Zoom 8；若會裁到北端／南端，就自動退到 Zoom 7。
+  // 最高仍只到 Zoom 8，避免長距離模式被放得過近。
+  applyBoundsView(TAIWAN_FULL_BOUNDS,7,8,.82);
 }
 
 function haversineKm(a,b){
@@ -1633,36 +1745,107 @@ function boundsDiagonalKm(b){
   return haversineKm([b.minLng,b.minLat],[b.maxLng,b.maxLat]);
 }
 
-function applySmartLocalView(coord,inTaiwan){
-  const b=cameraTrailBounds();
-  if(!b){
-    center={lat:Number(coord[1]),lng:Number(coord[0])};
-    zoom=inTaiwan?14:13;
-    return;
-  }
+const TAIWAN_WIDE_RANGE_KM = 15; // 臺灣近期移動範圍超過約 15 km，視為跨鄉鎮／縣市尺度
 
-  const km=boundsDiagonalKm(b);
-
+function cameraBandForKm(km,inTaiwan){
+  // 臺灣只保留兩級鏡頭，避免 15/13/11/9/8 之間反覆變焦造成暈眩。
+  // 小範圍固定 Zoom 14；跨鄉鎮／縣市尺度直接 Zoom 8。
+  // 國外維持原本多級鏡頭邏輯，不做變更。
   if(inTaiwan){
-    // 臺灣：小範圍就放大；活動範圍愈大就逐級拉遠；跨縣市到一定程度才顯示全臺。
-    if(km<1.5){ center={lat:Number(coord[1]),lng:Number(coord[0])}; zoom=16; return; }
-    if(km<5){ applyBoundsView(b,13,16,.62); return; }
-    if(km<15){ applyBoundsView(b,12,15,.64); return; }
-    if(km<40){ applyBoundsView(b,10,13,.68); return; }
-    if(km<100){ applyBoundsView(b,9,11,.72); return; }
-    if(km<220){ applyBoundsView(b,8,10,.78); return; }
+    if(km<TAIWAN_WIDE_RANGE_KM) return {band:0,zoom:14};
+    return {band:1,zoom:8};
+  }
+  if(km<3) return {band:0,zoom:14};
+  if(km<12) return {band:1,zoom:12};
+  if(km<50) return {band:2,zoom:10};
+  if(km<180) return {band:3,zoom:8};
+  if(km<600) return {band:4,zoom:6};
+  return {band:5,zoom:4};
+}
+
+function pointInsideCameraSafeZone(coord){
+  if(!coord || !mapWrap.clientWidth || !mapWrap.clientHeight) return false;
+  const q=screenPoint(Number(coord[0]),Number(coord[1]));
+  const mx=(1-CAMERA_SAFE_X)*mapWrap.clientWidth/2;
+  const my=(1-CAMERA_SAFE_Y)*mapWrap.clientHeight/2;
+  return q.x>=mx && q.x<=mapWrap.clientWidth-mx && q.y>=my && q.y<=mapWrap.clientHeight-my;
+}
+
+function gentlyPanToward(coord,force=false){
+  if(!coord) return;
+  const lng=Number(coord[0]), lat=Number(coord[1]);
+  if(!Number.isFinite(lng)||!Number.isFinite(lat)) return;
+  if(!force && pointInsideCameraSafeZone(coord)) return;
+
+  // 不瞬間把中心抓到標點，而是只移動一部分距離，降低暈眩感。
+  const factor=force?0.55:0.32;
+  center={
+    lat:center.lat+(lat-center.lat)*factor,
+    lng:center.lng+(lng-center.lng)*factor
+  };
+}
+
+function applyTaiwanCameraImmediate(wide,coord){
+  // 臺灣鏡頭只有兩個狀態，而且直接切換，不做逐級 Zoom、不受 CAMERA_ZOOM_LOCK_MS 限制。
+  const mode=wide?"WIDE":"SMALL";
+  const changed=taiwanCameraMode!==mode;
+  taiwanCameraMode=mode;
+  cameraCurrentBand=wide?1:0;
+  cameraLastZoomChange=performance.now();
+  cameraLastRealUpdate=performance.now();
+
+  if(wide){
+    // 完整全臺固定置中；不再被目前位置拉走。
     setTaiwanAnimationView();
+  }else if(coord){
+    zoom=14;
+    // 模式切回小範圍時直接以目前位置為中心；同模式內才使用安全框平移。
+    if(changed){
+      center={lat:Number(coord[1]),lng:Number(coord[0])};
+    }else{
+      gentlyPanToward(coord,false);
+    }
+  }
+}
+
+function applyStableCameraView(coord,inTaiwan,force=false){
+  if(inTaiwan){
+    // 臺灣的 Zoom 完全由 preflightTaiwanCamera 預先決定；這裡只維持目前模式，
+    // 不再依近期軌跡重新算 Zoom，避免 14/8 切換延遲或反覆變焦。
+    if(taiwanCameraMode==="WIDE"){
+      setTaiwanAnimationView();
+      return;
+    }
+    if(taiwanCameraMode==="SMALL"){
+      gentlyPanToward(coord,force);
+      return;
+    }
+    applyTaiwanCameraImmediate(false,coord);
     return;
   }
 
-  // 國外：同樣依目前這一段近期活動範圍縮放，不把以前去過的國家一起塞進來。
-  if(km<2){ center={lat:Number(coord[1]),lng:Number(coord[0])}; zoom=15; return; }
-  if(km<8){ applyBoundsView(b,12,15,.62); return; }
-  if(km<30){ applyBoundsView(b,10,13,.66); return; }
-  if(km<100){ applyBoundsView(b,8,11,.70); return; }
-  if(km<300){ applyBoundsView(b,6,9,.74); return; }
-  if(km<900){ applyBoundsView(b,5,8,.78); return; }
-  applyBoundsView(b,3,6,.82);
+  // 國外維持既有多級鏡頭邏輯。
+  const b=cameraTrailBounds();
+  const km=boundsDiagonalKm(b);
+  const target=cameraBandForKm(km,false);
+  const now=performance.now();
+
+  if(cameraCurrentBand===null){
+    cameraCurrentBand=target.band;
+    cameraLastZoomChange=now;
+    zoom=target.zoom;
+    gentlyPanToward(coord,true);
+    return;
+  }
+
+  if(target.band!==cameraCurrentBand && (force || now-cameraLastZoomChange>=CAMERA_ZOOM_LOCK_MS)){
+    const levels=[{zoom:14},{zoom:12},{zoom:10},{zoom:8},{zoom:6},{zoom:4}];
+    cameraCurrentBand=Math.max(0,Math.min(levels.length-1,target.band));
+    cameraLastZoomChange=now;
+    // 直接切到目標 Zoom，不經過任何中間級別。
+    zoom=levels[cameraCurrentBand].zoom;
+  }
+  gentlyPanToward(coord,force);
 }
 
 function updateAnimationCamera(item){
@@ -1674,29 +1857,53 @@ function updateAnimationCamera(item){
   const inTaiwan=isTaiwanCoordinate(lat,lng);
   const nextMode=inTaiwan ? "TAIWAN" : "FOREIGN";
   const jumpKm=haversineKm(animationRegionLastCoord,item.coord);
+  const now=performance.now();
 
-  if(animationRegionMode!==nextMode){
-    // 臺灣 / 國外切換時重新建立當地鏡頭，不沿用上一地區的大範圍。
+  // 臺灣：鏡頭狀態在「畫這一段之前」已由 preflightTaiwanCamera 決定。
+  // 這裡絕不再改 Zoom，只在小範圍模式下做低頻安全框平移。
+  if(inTaiwan){
+    if(animationRegionMode!=="TAIWAN"){
+      animationRegionMode="TAIWAN";
+      animationRegionBounds=null;
+      animationRegionLastCoord=item.coord;
+      resetCameraTrail(item);
+      if(taiwanCameraMode==="WIDE") setTaiwanAnimationView();
+      else if(taiwanCameraMode==="SMALL") applyTaiwanCameraImmediate(false,item.coord);
+      return;
+    }
+    animationRegionLastCoord=item.coord;
+    addCameraTrail(item);
+    if(taiwanCameraMode==="SMALL" && (forceCameraUpdateNeeded(item.coord) || now-cameraLastRealUpdate>=CAMERA_UPDATE_MS)){
+      cameraLastRealUpdate=now;
+      gentlyPanToward(item.coord,false);
+    }
+    return;
+  }
+
+  // 國外維持原本邏輯；跨國/長距離國外移動時直接切到新區域。
+  if(animationRegionMode!==nextMode || jumpKm>1200){
     animationRegionMode=nextMode;
     animationRegionBounds=null;
     animationRegionLastCoord=item.coord;
     resetCameraTrail(item);
-    applySmartLocalView(item.coord,inTaiwan);
-    return;
-  }
-
-  // 國外若突然跨越很遠距離，直接視為抵達新的區域，重新放大到目的地附近。
-  if(!inTaiwan && jumpKm>1200){
-    animationRegionBounds=null;
-    resetCameraTrail(item);
-    animationRegionLastCoord=item.coord;
-    applySmartLocalView(item.coord,false);
+    cameraCurrentBand=null;
+    taiwanCameraMode=null;
+    cameraLastRealUpdate=now;
+    cameraLastZoomChange=0;
+    applyStableCameraView(item.coord,false,true);
     return;
   }
 
   addCameraTrail(item);
-  applySmartLocalView(item.coord,inTaiwan);
   animationRegionLastCoord=item.coord;
+  if(!forceCameraUpdateNeeded(item.coord) && now-cameraLastRealUpdate<CAMERA_UPDATE_MS) return;
+  cameraLastRealUpdate=now;
+  applyStableCameraView(item.coord,false,false);
+}
+
+function forceCameraUpdateNeeded(coord){
+  // 只有標點真的快離開安全框，才提早允許一次平移；不因此觸發頻繁變焦。
+  return !pointInsideCameraSafeZone(coord);
 }
 
 function getAllRouteBounds(){
@@ -1899,7 +2106,7 @@ showRaw.onchange=()=>{if(selectedDate) renderSelectedDate()};
 window.addEventListener("resize",()=>{if(selectedDate) renderMap()});
 
 // ---------- History animation helpers ----------
-const ANIMATION_SPEED_LEVELS=[0.5,1,2,5,10,20,30,40,50,60,70,80,90,100];
+const ANIMATION_SPEED_LEVELS=[0.5,1,1.5,2,5,10,20,30,40,50,60,70,80,90,100];
 function getAnimationSpeed(){
   const idx=Math.max(0,Math.min(ANIMATION_SPEED_LEVELS.length-1,Number(animationSpeed.value)||0));
   return ANIMATION_SPEED_LEVELS[idx];
@@ -1909,7 +2116,21 @@ function updateAnimationSpeedLabel(){
   animationSpeedValue.textContent=`${speed}×`;
   animationSpeed.setAttribute("aria-valuetext",`${speed} 倍速`);
 }
-animationSpeed.addEventListener("input",updateAnimationSpeedLabel);
+function setAnimationSpeedValue(speed,fromAuto=false){
+  const idx=ANIMATION_SPEED_LEVELS.indexOf(speed);
+  if(idx<0) return;
+  animationSpeed.value=String(idx);
+  updateAnimationSpeedLabel();
+  if(!fromAuto) animationSpeedManuallyChanged=true;
+}
+function applyTaiwanAutoSpeed(isWide){
+  if(animationSpeedManuallyChanged) return;
+  setAnimationSpeedValue(10,true);
+}
+animationSpeed.addEventListener("input",()=>{
+  animationSpeedManuallyChanged=true;
+  updateAnimationSpeedLabel();
+});
 updateAnimationSpeedLabel();
 
 function featureSortTime(f){
@@ -1989,8 +2210,26 @@ function resetAnimationDrawing(clearUI=true){
   animationRegionBounds=null;
   animationRegionLastCoord=null;
   animationCameraTrail=[];
+  cameraLastRealUpdate=0;
+  cameraLastZoomChange=0;
+  cameraCurrentBand=null;
+  taiwanCameraMode=null;
+  taiwanForcedWideUntilTime=0;
   animationCurrentRouteKey=null;
   animationSyntheticLines=[];
+  animationDisplayCoord=null;
+  animationTweenFrom=null;
+  animationTweenTo=null;
+  animationTweenProgress=1;
+  animationWaterTrail=[];
+  animationRouteKm=0;
+  animationDisplayKm=0;
+  animationTweenKmStart=0;
+  animationTweenKmEnd=0;
+  animationPendingCrossDayBridge=null;
+  animationTweenDuration=180;
+  updateKmCounter(0);
+  if(animationPreflightTimer){ clearTimeout(animationPreflightTimer); animationPreflightTimer=null; }
   if(clearUI){
     animationProgress.value=0;
     animationProgress.disabled=true;
@@ -2017,6 +2256,136 @@ function syncAnimationDate(item){
   currentDateEl.textContent=item.date;
   renderCalendar();
   updateDayNav();
+}
+
+function updateKmCounter(value){
+  const v=Number.isFinite(value)?Math.max(0,value):0;
+  animationDisplayKm=v;
+  animationKmValue.textContent=v<1000?v.toFixed(1):Math.round(v).toLocaleString("zh-TW");
+}
+
+function taiwanLocalDayKeyFromTime(ms){
+  const t=Number(ms);
+  if(!Number.isFinite(t)) return "";
+  // 臺灣全年固定 UTC+8、無日光節約時間；直接加 8 小時比逐筆 Intl.DateTimeFormat 快很多。
+  return new Date(t+8*60*60*1000).toISOString().slice(0,10);
+}
+
+function taiwanDayKeyForItem(item){
+  if(!item) return "";
+  return taiwanLocalDayKeyFromTime(item.time);
+}
+
+function buildTaiwanDayPlans(items){
+  const groups=new Map();
+  for(const item of items||[]){
+    if(!item || !item.coord) continue;
+    const lng=Number(item.coord[0]), lat=Number(item.coord[1]);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    const key=taiwanDayKeyForItem(item);
+    if(!key) continue;
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push({coord:[lng,lat],time:Number(item.time)||0});
+  }
+
+  const plans=new Map();
+  for(const [key,list] of groups.entries()){
+    if(!list.length) continue;
+    list.sort((a,b)=>a.time-b.time);
+    let minLng=Infinity,maxLng=-Infinity,minLat=Infinity,maxLat=-Infinity;
+    let allTaiwan=true;
+    let firstCoord=null,lastCoord=null;
+    for(const p of list){
+      const [lng,lat]=p.coord;
+      if(!firstCoord) firstCoord=[lng,lat];
+      lastCoord=[lng,lat];
+      if(!isTaiwanCoordinate(lat,lng)) allTaiwan=false;
+      minLng=Math.min(minLng,lng); maxLng=Math.max(maxLng,lng);
+      minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat);
+    }
+    if(!Number.isFinite(minLng)) continue;
+    const diagonal=haversineKm([minLng,minLat],[maxLng,maxLat]);
+    plans.set(key,{
+      key,allTaiwan,firstCoord,lastCoord,diagonal,
+      wide:allTaiwan && diagonal>=TAIWAN_WIDE_RANGE_KM
+    });
+  }
+  return plans;
+}
+
+function buildInitialLookaheadPlan(items){
+  if(!items || !items.length) return {mode:"NONE",wide:false,firstCoord:null,diagonal:0};
+  const first=items.find(i=>i&&i.coord&&Number.isFinite(Number(i.coord[0]))&&Number.isFinite(Number(i.coord[1])));
+  if(!first) return {mode:"NONE",wide:false,firstCoord:null,diagonal:0};
+
+  const firstCoord=[Number(first.coord[0]),Number(first.coord[1])];
+  const firstTime=Number(first.time)||0;
+  const firstInTaiwan=isTaiwanCoordinate(firstCoord[1],firstCoord[0]);
+  const endTime=firstTime+INITIAL_LOOKAHEAD_MS;
+
+  let minLng=firstCoord[0],maxLng=firstCoord[0],minLat=firstCoord[1],maxLat=firstCoord[1];
+  let allTaiwan=firstInTaiwan;
+  let count=0;
+
+  // 只掃描從動畫第一筆起算 24 小時。這可跨午夜，正確涵蓋「下午出發、隔天上午跨縣市」的旅程。
+  for(const item of items){
+    if(!item || !item.coord) continue;
+    const t=Number(item.time)||0;
+    if(t<firstTime) continue;
+    if(t>endTime) break;
+    const lng=Number(item.coord[0]),lat=Number(item.coord[1]);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    minLng=Math.min(minLng,lng); maxLng=Math.max(maxLng,lng);
+    minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat);
+    if(!isTaiwanCoordinate(lat,lng)) allTaiwan=false;
+    count++;
+  }
+
+  const diagonal=haversineKm([minLng,minLat],[maxLng,maxLat]);
+  return {
+    mode:firstInTaiwan?"TAIWAN":"FOREIGN",
+    wide:firstInTaiwan && allTaiwan && diagonal>=TAIWAN_WIDE_RANGE_KM,
+    firstCoord,diagonal,count,firstTime,endTime
+  };
+}
+
+function initialPlaybackPreflight(items){
+  // 全部歷史播放直接使用 JSON 載入時已算好的快取，避免按播放後再掃描大量資料。
+  if(animationScope.value==="all" && cachedInitialPreflight && cachedAllAnimationItems===items){
+    return cachedInitialPreflight;
+  }
+  return buildInitialLookaheadPlan(items);
+}
+function applyInitialPlaybackPreflight(items){
+  const p=initialPlaybackPreflight(items);
+  if(!p.firstCoord) return;
+  animationRegionMode=p.mode;
+  animationRegionLastCoord=p.firstCoord;
+  animationCameraTrail=[];
+  cameraCurrentBand=null;
+  taiwanCameraMode=null;
+  taiwanForcedWideUntilTime=0;
+  cameraLastRealUpdate=performance.now();
+  cameraLastZoomChange=performance.now();
+  currentTaiwanPlanDayKey=null;
+
+  if(p.mode==="TAIWAN"){
+    if(p.wide){
+      // 關鍵：前 24 小時既然已判定會大範圍移動，就鎖住全臺視角與 10×，
+      // 不允許前面那些 100m~1km 的小段把鏡頭/速度立即拉回小範圍。
+      taiwanForcedWideUntilTime=Number(p.endTime)||0;
+      applyTaiwanCameraImmediate(true,p.firstCoord);
+      if(!animationSpeedManuallyChanged) setAnimationSpeedValue(10,true);
+      animationNow.textContent=`已預判前 24 小時約 ${p.diagonal.toFixed(0)} km｜開場鎖定全臺 10×`;
+    }else{
+      applyTaiwanCameraImmediate(false,p.firstCoord);
+      if(!animationSpeedManuallyChanged) setAnimationSpeedValue(10,true);
+      animationNow.textContent=`已預判前 24 小時約 ${p.diagonal.toFixed(1)} km｜小範圍 10×`;
+    }
+  }else{
+    resetRegionBounds(p.firstCoord);
+    setForeignAnimationView(p.firstCoord);
+  }
 }
 
 function shouldBridgeMissingRoute(fromCoord,toCoord,item){
@@ -2057,17 +2426,164 @@ function bridgeMissingRoute(fromCoord,toCoord){
   animationSyntheticLines.push(bridge);
 }
 
-function consumeAnimationItem(item){
-  const previousCoord=animationLastCoord ? [animationLastCoord[0],animationLastCoord[1]] : null;
+function crossDayTweenDuration(km,speed){
+  // 跨日補線仍要看得到畫線，但必須真的隨倍速縮短。
+  // 舊版 speed>=5 後幾乎固定 420~900ms，數千個跨日缺口累積後會把 100× 拖成數十分鐘甚至更久。
+  let base;
+  if(km>=300) base=1100;
+  else if(km>=100) base=900;
+  else if(km>=30) base=700;
+  else if(km>=10) base=520;
+  else if(km>=3) base=380;
+  else base=260;
+  const scale=Math.pow(Math.max(1,speed),0.82);
+  const minVisible=speed>=100?28:speed>=50?36:speed>=20?48:speed>=10?65:90;
+  return Math.max(minVisible,Math.round(base/scale));
+}
 
-  // 只要上一個有效位置與下一筆資料之間沒有同一條實際 route 連接，就自動補紅線；跨天也一律相連。
-  if(previousCoord && shouldBridgeMissingRoute(previousCoord,item.coord,item)){
+function routeExtentKmForItem(item){
+  if(!item || item.kind!=="route" || !item.feature) return 0;
+  const g=item.feature.geometry||{};
+  const coords=(g.coordinates||[]).filter(c=>c&&c.length>=2);
+  if(coords.length<2) return 0;
+  let minLng=Infinity,maxLng=-Infinity,minLat=Infinity,maxLat=-Infinity;
+  let allTaiwan=true;
+  for(const c of coords){
+    const lng=Number(c[0]), lat=Number(c[1]);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    minLng=Math.min(minLng,lng); maxLng=Math.max(maxLng,lng);
+    minLat=Math.min(minLat,lat); maxLat=Math.max(maxLat,lat);
+    if(!isTaiwanCoordinate(lat,lng)) allTaiwan=false;
+  }
+  if(!allTaiwan || !Number.isFinite(minLng)) return 0;
+  return haversineKm([minLng,minLat],[maxLng,maxLat]);
+}
+
+function nextValidTaiwanItem(index){
+  if(!Number.isInteger(index)) return null;
+  for(let i=index+1;i<Math.min(animationItems.length,index+8);i++){
+    const n=animationItems[i];
+    if(!n || !n.coord) continue;
+    const lng=Number(n.coord[0]),lat=Number(n.coord[1]);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    return {item:n,index:i,coord:[lng,lat]};
+  }
+  return null;
+}
+
+function upcomingTaiwanLongMove(item,itemIndex){
+  if(!item || !item.coord) return false;
+  const cur=[Number(item.coord[0]),Number(item.coord[1])];
+  if(!isTaiwanCoordinate(cur[1],cur[0])) return false;
+
+  // 1) 本身若是長距離 route，直接判定。
+  if(routeExtentKmForItem(item)>=TAIWAN_WIDE_RANGE_KM) return true;
+
+  // 2) 最重要：在「目前點」就先看下一個有效座標。
+  // 舊版 semanticSegments 常只有 activity.start / activity.end；
+  // 長途車程的 start 本身看起來只是小點，真正 48km/55km 會出現在下一個 end。
+  // 因此必須在畫 start 之前就預看 next，才能先切全臺 5×。
+  const next=nextValidTaiwanItem(itemIndex);
+  if(next && isTaiwanCoordinate(next.coord[1],next.coord[0])){
+    if(haversineKm(cur,next.coord)>=TAIWAN_WIDE_RANGE_KM) return true;
+    if(routeExtentKmForItem(next.item)>=TAIWAN_WIDE_RANGE_KM) return true;
+  }
+  return false;
+}
+
+function preflightTaiwanCamera(previousCoord,item,itemIndex){
+  if(!animationFollow.checked || !item || !item.coord) return;
+  const cur=[Number(item.coord[0]),Number(item.coord[1])];
+  if(!Number.isFinite(cur[0])||!Number.isFinite(cur[1])) return;
+  if(!isTaiwanCoordinate(cur[1],cur[0])) return;
+
+  const itemTime=Number(item.time)||0;
+
+  // 開場 24 小時已判定為長距離時，整個預判窗鎖住全臺視角與 10×。
+  // 這直接修掉「開場先全臺，第一個 92m 小段又立刻退回 Zoom14/10×」的 bug。
+  if(taiwanForcedWideUntilTime && itemTime<=taiwanForcedWideUntilTime){
+    applyTaiwanAutoSpeed(true);
+    if(taiwanCameraMode!=="WIDE") applyTaiwanCameraImmediate(true,cur);
+    return;
+  }
+
+  // 預看下一段，而不是等長距離已經畫出去才反應。
+  const longMove=upcomingTaiwanLongMove(item,itemIndex);
+  applyTaiwanAutoSpeed(longMove);
+
+  if(longMove){
+    if(taiwanCameraMode!=="WIDE") applyTaiwanCameraImmediate(true,cur);
+    return;
+  }
+
+  // 沒有即將發生的長距離移動，就直接回小範圍 Zoom14。
+  // 模式切換本身是一次完成，不經過 13/12/11/... 中間層級。
+  if(taiwanCameraMode!=="SMALL") applyTaiwanCameraImmediate(false,cur);
+}
+
+function consumeAnimationItem(item,itemIndex){
+  const previousCoord=animationLastCoord ? [animationLastCoord[0],animationLastCoord[1]] : null;
+  const segmentKm=(previousCoord && item.coord)?haversineKm(previousCoord,item.coord):0;
+
+  // 先使用原本已成功的「下一段預判」決定鏡頭與自動倍速。
+  // 開場若已被前 24 小時判定為全台 10×，這裡不得被任何短距／跨日邏輯覆蓋。
+  preflightTaiwanCamera(previousCoord,item,itemIndex);
+
+  const currentDate=item.date||"";
+  const crossedDay=Boolean(animationLastDate && currentDate && animationLastDate!==currentDate);
+  const needsBridge=Boolean(previousCoord && shouldBridgeMissingRoute(previousCoord,item.coord,item));
+  const itemTime=Number(item.time)||0;
+  const forcedWideActive=Boolean(taiwanForcedWideUntilTime && itemTime<=taiwanForcedWideUntilTime);
+
+  // 只有「真正跨日缺口」才依距離重新決定自動倍速。
+  // 但若開場／目前已被長距離預判鎖定全台 10×，絕不允許改回其他倍速。
+  if(crossedDay && needsBridge && !animationSpeedManuallyChanged && !forcedWideActive){
+    const aTaiwan=isTaiwanCoordinate(Number(previousCoord[1]),Number(previousCoord[0]));
+    const bTaiwan=isTaiwanCoordinate(Number(item.coord[1]),Number(item.coord[0]));
+    const wide=aTaiwan && bTaiwan && segmentKm>=TAIWAN_WIDE_RANGE_KM;
+    setAnimationSpeedValue(10,true);
+    if(wide && taiwanCameraMode!=="WIDE") applyTaiwanCameraImmediate(true,item.coord);
+  }
+
+  const speed=getAnimationSpeed();
+  // 低倍速保留完整連續插值；高倍速只對跨日／缺口保留極短可視補線。
+  // 20×以上不再為每一筆普通定位建立 Tween，否則大量舊資料會讓高倍速名義上很快、實際仍跑非常久。
+  const doTween=Boolean(previousCoord && item.coord && (speed<=10 || crossedDay));
+
+  if(doTween){
+    animationTweenFrom=[Number(previousCoord[0]),Number(previousCoord[1])];
+    animationTweenTo=[Number(item.coord[0]),Number(item.coord[1])];
+    animationTweenProgress=0;
+    animationDisplayCoord=[animationTweenFrom[0],animationTweenFrom[1]];
+    animationTweenKmStart=animationRouteKm;
+    animationTweenKmEnd=animationRouteKm+segmentKm;
+    animationWaterTrail=[];
+    animationTweenDuration=crossedDay
+      ? crossDayTweenDuration(segmentKm,speed)
+      : Math.max(28,Math.round(260/Math.pow(Math.max(1,speed),0.78)));
+    animationPendingCrossDayBridge=(crossedDay && needsBridge)?{
+      from:[animationTweenFrom[0],animationTweenFrom[1]],
+      to:[animationTweenTo[0],animationTweenTo[1]]
+    }:null;
+  }else{
+    animationTweenFrom=null;
+    animationTweenTo=null;
+    animationTweenProgress=1;
+    animationDisplayCoord=item.coord?[Number(item.coord[0]),Number(item.coord[1])]:animationDisplayCoord;
+    animationWaterTrail=[];
+    animationRouteKm+=segmentKm;
+    animationTweenKmStart=animationRouteKm;
+    animationTweenKmEnd=animationRouteKm;
+    updateKmCounter(animationRouteKm);
+    animationPendingCrossDayBridge=null;
+  }
+
+  // 同日銜接沿用原本行為；跨日則等標點真的走到終點後才提交完整補線，避免瞬間出現。
+  if(needsBridge && !crossedDay){
     bridgeMissingRoute(previousCoord,item.coord);
   }
 
   if(item.kind==="route"){
-    // 以真正的 route feature 分段，不再因為跨海距離大就把航線切斷。
-    // 若 JSON 本身有 route 就依 route 畫；route 之間、跨天或缺資料區段則由前後有效定位點自動補直線。
     if(!animationCurrentLine || animationCurrentRouteKey!==item.routeKey){
       if(animationCurrentLine && animationCurrentLine.length>=2) animationDrawnLines.push(animationCurrentLine);
       animationCurrentLine=[item.coord];
@@ -2075,9 +2591,6 @@ function consumeAnimationItem(item){
     }else{
       animationCurrentLine.push(item.coord);
     }
-  }else{
-    // 歷史動畫不顯示任何停留點／起訖點／Raw 點；
-    // 點資料只用來判斷目前位置、日期、鏡頭與缺漏跨國連線。
   }
   animationLastCoord=item.coord;
   syncAnimationDate(item);
@@ -2100,30 +2613,83 @@ function animationStep(ts){
   if(!animationLastTS) animationLastTS=ts;
   const dt=Math.min(100,ts-animationLastTS);
   animationLastTS=ts;
-  const speed=getAnimationSpeed();
-  animationAccumulator += dt*speed;
+  let speed=getAnimationSpeed();
 
-  // 以畫面更新量推進資料；速度越高，每幀消化越多項目。
-  const interval=28;
-  let changed=false;
-  while(animationAccumulator>=interval && animationIndex<animationItems.length){
-    animationAccumulator-=interval;
-    consumeAnimationItem(animationItems[animationIndex]);
-    animationIndex++;
-    changed=true;
-    if(speed<=1) break;
+  // 10×以下與跨日缺口都用逐幀插值，避免舊 start/end 資料一段一段停頓或跨日瞬移。
+  if(animationTweenFrom && animationTweenTo && animationTweenProgress<1){
+    const moveDuration=Math.max(100,animationTweenDuration||180);
+    animationTweenProgress=Math.min(1,animationTweenProgress+dt/moveDuration);
+    const t=animationTweenProgress;
+    // 接近線性的 smoothstep，保留一點柔順但減少每小段「停一下再起步」。
+    const eased=t*t*(3-2*t);
+    animationDisplayCoord=[
+      animationTweenFrom[0]+(animationTweenTo[0]-animationTweenFrom[0])*eased,
+      animationTweenFrom[1]+(animationTweenTo[1]-animationTweenFrom[1])*eased
+    ];
+    updateKmCounter(animationTweenKmStart+(animationTweenKmEnd-animationTweenKmStart)*eased);
+    animationWaterTrail.push({coord:[animationDisplayCoord[0],animationDisplayCoord[1]],ts});
+    animationWaterTrail=animationWaterTrail.filter(p=>ts-p.ts<=600).slice(-28);
+    drawOverlay();
+
+    if(animationTweenProgress<1){
+      animationRAF=requestAnimationFrame(animationStep);
+      return;
+    }
+
+    animationDisplayCoord=[animationTweenTo[0],animationTweenTo[1]];
+    animationRouteKm=animationTweenKmEnd;
+    updateKmCounter(animationRouteKm);
+
+    // 跨日補線到達後才正式存入歷史線；畫的過程已由當前 tween 線段呈現。
+    if(animationPendingCrossDayBridge){
+      bridgeMissingRoute(animationPendingCrossDayBridge.from,animationPendingCrossDayBridge.to);
+      animationPendingCrossDayBridge=null;
+    }
+    animationTweenFrom=null;
+    animationTweenTo=null;
+    animationTweenProgress=1;
+    animationWaterTrail=[];
+    // 重新讀取可能被預判改變的倍速。
+    speed=getAnimationSpeed();
   }
+
+  // 真正依倍速推進資料。高倍速使用較大的每幀處理預算，並設上限避免單幀鎖死 UI。
+  // 1×維持原本觀看節奏；100×的資料吞吐量約為 1× 的 100 倍，而不是只多處理幾筆。
+  animationAccumulator += dt*speed;
+  const interval=180;
+  let changed=false;
+  const maxItemsThisFrame = speed>=100?220 : speed>=50?140 : speed>=20?80 : speed>=10?36 : 12;
+  let processedThisFrame=0;
+
+  while(animationAccumulator>=interval && animationIndex<animationItems.length && processedThisFrame<maxItemsThisFrame){
+    animationAccumulator-=interval;
+    consumeAnimationItem(animationItems[animationIndex],animationIndex);
+    animationIndex++;
+    processedThisFrame++;
+    changed=true;
+    if(animationTweenFrom && animationTweenProgress<1) break;
+    if(getAnimationSpeed()<=2) break;
+  }
+
   if(changed){
     updateAnimationUI();
     renderMap();
+  }else if(getAnimationSpeed()<=2 || animationTweenProgress<1){
+    drawOverlay();
   }
-  if(animationIndex>=animationItems.length){
+
+  if(animationIndex>=animationItems.length && !(animationTweenFrom && animationTweenProgress<1)){
     if(animationCurrentLine && animationCurrentLine.length>=2){
       animationDrawnLines.push(animationCurrentLine);
       animationCurrentLine=null;
     }
     animationRunning=false;
     animationPaused=false;
+    animationWaterTrail=[];
+    animationTweenFrom=null;
+    animationTweenTo=null;
+    animationTweenProgress=1;
+    animationPendingCrossDayBridge=null;
     playHistoryBtn.textContent="↻ 重新播放";
     pauseHistoryBtn.disabled=true;
     stopHistoryBtn.disabled=false;
@@ -2145,27 +2711,44 @@ function animationStep(ts){
 
 function startHistoryAnimation(){
   worldFinalMode=false;
-  const source=getAnimationSourceFeatures();
-  animationItems=makeAnimationItems(source);
+  const scope=animationScope.value;
+  if(scope==="all" && cachedAllAnimationItems.length){
+    animationItems=cachedAllAnimationItems;
+  }else{
+    const source=getAnimationSourceFeatures();
+    animationItems=makeAnimationItems(source);
+  }
   if(!animationItems.length){
     alert("目前範圍沒有可播放的時間軸資料。");
     return;
   }
+
   resetAnimationDrawing(false);
-  animationItems=makeAnimationItems(source);
   animationProgress.disabled=false;
   animationStartLabel.textContent=animationItems[0].date||"開始";
-  animationNow.textContent="準備播放";
-  animationRunning=true;
-  animationPaused=false;
-  const firstCoord=animationItems[0]?.coord;
-  if(firstCoord && isTaiwanCoordinate(Number(firstCoord[1]),Number(firstCoord[0]))){
-    setTaiwanAnimationView();
-  }
-  playHistoryBtn.textContent="↻ 重新播放";
-  pauseHistoryBtn.disabled=false;
+  animationNow.textContent="正在套用預先計算的鏡頭與倍速…";
+  playHistoryBtn.textContent="準備中…";
+  playHistoryBtn.disabled=true;
+  pauseHistoryBtn.disabled=true;
   stopHistoryBtn.disabled=false;
-  animationRAF=requestAnimationFrame(animationStep);
+
+  // 套用已預計算的前 24 小時移動範圍；跨午夜也能在第一幀前判斷長距離。
+  applyInitialPlaybackPreflight(animationItems);
+  renderMap();
+
+  // 只留短暫圖磚緩衝，不再於此階段重新掃描全部資料。
+  animationPreflightTimer=setTimeout(()=>{
+    animationPreflightTimer=null;
+    animationRunning=true;
+    animationPaused=false;
+    animationLastTS=0;
+    animationAccumulator=0;
+    animationNow.textContent="開始播放";
+    playHistoryBtn.disabled=false;
+    playHistoryBtn.textContent="↻ 重新播放";
+    pauseHistoryBtn.disabled=false;
+    animationRAF=requestAnimationFrame(animationStep);
+  },280);
 }
 
 playHistoryBtn.onclick=()=>startHistoryAnimation();
@@ -2186,10 +2769,10 @@ animationProgress.addEventListener("input",()=>{
   const wasRunning=animationRunning;
   animationRunning=false;
   if(animationRAF) cancelAnimationFrame(animationRAF);
-  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCameraTrail=[]; animationCurrentRouteKey=null; animationSyntheticLines=[];
+  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCameraTrail=[]; cameraLastRealUpdate=0; cameraLastZoomChange=0; cameraCurrentBand=null; taiwanCameraMode=null; taiwanForcedWideUntilTime=0; animationCurrentRouteKey=null; animationSyntheticLines=[]; animationDisplayCoord=null; animationTweenFrom=null; animationTweenTo=null; animationTweenProgress=1; animationWaterTrail=[]; animationRouteKm=0; animationDisplayKm=0; animationTweenKmStart=0; animationTweenKmEnd=0; animationPendingCrossDayBridge=null; animationTweenDuration=180; updateKmCounter(0);
   animationIndex=0;
   for(let i=0;i<=target;i++){
-    consumeAnimationItem(animationItems[i]);
+    consumeAnimationItem(animationItems[i],i);
     animationIndex=i+1;
   }
   updateAnimationUI();
@@ -2407,6 +2990,10 @@ fileInput.addEventListener("change",async e=>{
 
     resetAnimationDrawing(true);
     allFeatures=parsed.features;
+    // JSON 載入時先完成「全部歷史」動畫項目與開場 24 小時預判；之後按播放即可立即起跑。
+    fileInfo.textContent=`正在建立動畫索引與前 24 小時鏡頭預判…`;
+    cachedAllAnimationItems=makeAnimationItems(allFeatures);
+    cachedInitialPreflight=buildInitialLookaheadPlan(cachedAllAnimationItems);
     dateIndex=buildDateIndex(allFeatures);
     dataDates=[...dateIndex.keys()].sort();
     foreignDates=buildForeignDates(dateIndex);
@@ -2451,6 +3038,8 @@ fileInput.addEventListener("change",async e=>{
   }catch(err){
     console.error(err);
     allFeatures=[];
+    cachedAllAnimationItems=[];
+    cachedInitialPreflight=null;
     dateIndex=new Map();
     dataDates=[];
     foreignDates=[];
