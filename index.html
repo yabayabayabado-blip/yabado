@@ -658,7 +658,7 @@ const FINAL_WORLD_ROUTE_COLOR = "#d93025";
 let taiwanDayPlans = new Map();
 let cachedAllAnimationItems = [];
 let cachedInitialPreflight = null;
-let taiwanForcedWideUntilTime = 0; // 開場預判為長距離時，鎖定全臺視角直到預判窗結束，避免被前段小移動立刻拉回 Zoom 14
+let taiwanForcedWideUntilTime = 0; // 開場預判為長距離時，鎖定全臺視角直到預判窗結束，避免被前段小移動立刻拉回 Zoom 10
 let taiwanCameraMode = null; // "SMALL" / "WIDE"，臺灣只允許這兩種鏡頭，切換時直接跳到目標，不經中間 Zoom
 const INITIAL_LOOKAHEAD_MS = 24*60*60*1000; // 從動畫第一筆往後預看 24 小時，不受午夜切日影響
 let currentTaiwanPlanDayKey = "";
@@ -1749,10 +1749,10 @@ const TAIWAN_WIDE_RANGE_KM = 15; // 臺灣近期移動範圍超過約 15 km，�
 
 function cameraBandForKm(km,inTaiwan){
   // 臺灣只保留兩級鏡頭，避免 15/13/11/9/8 之間反覆變焦造成暈眩。
-  // 小範圍固定 Zoom 14；跨鄉鎮／縣市尺度直接 Zoom 8。
+  // 小範圍固定 Zoom 10；跨鄉鎮／縣市尺度直接 Zoom 8。
   // 國外維持原本多級鏡頭邏輯，不做變更。
   if(inTaiwan){
-    if(km<TAIWAN_WIDE_RANGE_KM) return {band:0,zoom:14};
+    if(km<TAIWAN_WIDE_RANGE_KM) return {band:0,zoom:10};
     return {band:1,zoom:8};
   }
   if(km<3) return {band:0,zoom:14};
@@ -1798,7 +1798,7 @@ function applyTaiwanCameraImmediate(wide,coord){
     // 完整全臺固定置中；不再被目前位置拉走。
     setTaiwanAnimationView();
   }else if(coord){
-    zoom=14;
+    zoom=10;
     // 模式切回小範圍時直接以目前位置為中心；同模式內才使用安全框平移。
     if(changed){
       center={lat:Number(coord[1]),lng:Number(coord[0])};
