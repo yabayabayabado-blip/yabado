@@ -462,7 +462,7 @@ body.capture-clean .mapStatus{bottom:28px}
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
     </div>
-    <div class="legend">— 藍：單日移動路線　｜　歷史動畫：僅顯示紅色累積路線（不顯示點位）｜跨國缺少路線時自動補紅色直線｜臺灣固定全臺視圖／國外依旅程區域自動切鏡　｜　臺灣單一 NLSC 底圖 ｜ 跨國自動切換 OSM ｜ 最大 Zoom 19</div>
+    <div class="legend">— 藍：單日移動路線　｜　歷史動畫：紅色標點沿路線前進；新線最深、舊線逐漸變淡但永不消失｜跨國缺少路線時自動補紅色直線｜小範圍自動放大／大範圍自動拉遠／跨國自動切鏡　｜　臺灣單一 NLSC 底圖 ｜ 跨國自動切換 OSM ｜ 最大 Zoom 19</div>
 
     <div id="mapWrap">
       <div id="tiles"></div>
@@ -617,6 +617,7 @@ let animationHasForeign = false;
 let animationRegionMode = null;      // "TAIWAN" 或 "FOREIGN"
 let animationRegionBounds = null;    // 只記錄目前所在區域，不把臺灣＋美國一起 fit 成世界圖
 let animationRegionLastCoord = null;
+let animationCameraTrail = []; // 近期移動座標，用來依移動尺度自動縮放
 let animationCurrentRouteKey = null;
 let animationSyntheticLines = []; // 缺漏的跨國／長距離移動自動補線，亦保留到最終世界圖
 let detectedTrips = [];
@@ -1441,10 +1442,21 @@ function drawOverlay(){
     hitPoints.push({x:q.x,y:q.y,r:Math.max(9,r+4),feature:f});
   }
 
-  // 累積式歷史動畫圖層：只保留走過的紅色路線；點位不繪製，直到停止/重播。
+  // 累積式歷史動畫圖層：
+  // 1) 路線永久保留。2) 越早的已完成路線越淡，但最低透明度固定，不會消失。
+  // 3) 畫面最前端以紅色標點顯示目前動畫位置。
   if(animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length){
-    for(const line of animationDrawnLines){
+    const totalLines=animationDrawnLines.length;
+    for(let lineIndex=0; lineIndex<totalLines; lineIndex++){
+      const line=animationDrawnLines[lineIndex];
       if(!line || line.length<2) continue;
+
+      // oldest = 0.16，newest completed = 0.82；永遠不低於 0.16。
+      const ageRatio=totalLines<=1 ? 1 : lineIndex/(totalLines-1);
+      const alpha=0.16 + 0.66*Math.pow(ageRatio,0.72);
+
+      ctx.save();
+      ctx.globalAlpha=alpha;
       ctx.beginPath();
       line.forEach((c,i)=>{
         const q=screenPoint(c[0],c[1]);
@@ -1455,18 +1467,41 @@ function drawOverlay(){
       ctx.lineJoin="round";
       ctx.lineCap="round";
       ctx.stroke();
+      ctx.restore();
     }
+
+    // 正在畫的最新一段維持最深紅色。
     if(animationCurrentLine && animationCurrentLine.length>=2){
+      ctx.save();
+      ctx.globalAlpha=1;
       ctx.beginPath();
       animationCurrentLine.forEach((c,i)=>{
         const q=screenPoint(c[0],c[1]);
         if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
       });
       ctx.strokeStyle="#d93025";
-      ctx.lineWidth=4;
+      ctx.lineWidth=4.5;
       ctx.lineJoin="round";
       ctx.lineCap="round";
       ctx.stroke();
+      ctx.restore();
+    }
+
+    // 目前位置標點：只有一顆會跟著動畫移動，不保留歷史點位。
+    if(animationLastCoord){
+      const q=screenPoint(animationLastCoord[0],animationLastCoord[1]);
+      ctx.save();
+      ctx.shadowColor="rgba(0,0,0,.28)";
+      ctx.shadowBlur=7;
+      ctx.beginPath();
+      ctx.arc(q.x,q.y,8,0,Math.PI*2);
+      ctx.fillStyle="#d93025";
+      ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.lineWidth=3;
+      ctx.strokeStyle="#ffffff";
+      ctx.stroke();
+      ctx.restore();
     }
   }
 }
@@ -1540,18 +1575,94 @@ function extendRegionBounds(coord){
 }
 
 function setForeignAnimationView(coord){
-  // 國外不再把臺灣一起塞進鏡頭，而是只看「目前這一段國外行程」。
-  // 初抵達時先給較大的當地視野；之後隨該區域實際移動範圍自動調整。
   if(!animationRegionBounds) resetRegionBounds(coord);
   const b=animationRegionBounds;
   const spanLng=Math.abs(b.maxLng-b.minLng);
   const spanLat=Math.abs(b.maxLat-b.minLat);
-  if(spanLng<0.35 && spanLat<0.35){
+  if(spanLng<0.08 && spanLat<0.08){
     center={lat:Number(coord[1]),lng:Number(coord[0])};
-    zoom=8;
+    zoom=14;
     return;
   }
-  applyBoundsView(b,4,10,.74);
+  applyBoundsView(b,4,15,.70);
+}
+
+function resetCameraTrail(item){
+  animationCameraTrail=[];
+  if(item && item.coord){
+    animationCameraTrail.push({coord:[Number(item.coord[0]),Number(item.coord[1])],time:Number(item.time)||0});
+  }
+}
+
+function addCameraTrail(item){
+  if(!item || !item.coord) return;
+  const lng=Number(item.coord[0]), lat=Number(item.coord[1]);
+  if(!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+  const t=Number(item.time)||0;
+  animationCameraTrail.push({coord:[lng,lat],time:t});
+
+  // 只保留近期移動，讓跨縣市之後回到小範圍活動時，鏡頭可以重新放大。
+  const latest=t;
+  if(latest>0){
+    const cutoff=latest-(2*60*60*1000); // 最近 2 小時
+    animationCameraTrail=animationCameraTrail.filter(p=>!p.time || p.time>=cutoff);
+  }
+  if(animationCameraTrail.length>140){
+    animationCameraTrail=animationCameraTrail.slice(-140);
+  }
+}
+
+function cameraTrailBounds(){
+  let b=null;
+  for(const p of animationCameraTrail){
+    const c=p.coord;
+    if(!c || c.length<2) continue;
+    const lng=Number(c[0]), lat=Number(c[1]);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
+    if(!b) b={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
+    else{
+      b.minLng=Math.min(b.minLng,lng); b.maxLng=Math.max(b.maxLng,lng);
+      b.minLat=Math.min(b.minLat,lat); b.maxLat=Math.max(b.maxLat,lat);
+    }
+  }
+  return b;
+}
+
+function boundsDiagonalKm(b){
+  if(!b) return 0;
+  return haversineKm([b.minLng,b.minLat],[b.maxLng,b.maxLat]);
+}
+
+function applySmartLocalView(coord,inTaiwan){
+  const b=cameraTrailBounds();
+  if(!b){
+    center={lat:Number(coord[1]),lng:Number(coord[0])};
+    zoom=inTaiwan?14:13;
+    return;
+  }
+
+  const km=boundsDiagonalKm(b);
+
+  if(inTaiwan){
+    // 臺灣：小範圍就放大；活動範圍愈大就逐級拉遠；跨縣市到一定程度才顯示全臺。
+    if(km<1.5){ center={lat:Number(coord[1]),lng:Number(coord[0])}; zoom=16; return; }
+    if(km<5){ applyBoundsView(b,13,16,.62); return; }
+    if(km<15){ applyBoundsView(b,12,15,.64); return; }
+    if(km<40){ applyBoundsView(b,10,13,.68); return; }
+    if(km<100){ applyBoundsView(b,9,11,.72); return; }
+    if(km<220){ applyBoundsView(b,8,10,.78); return; }
+    setTaiwanAnimationView();
+    return;
+  }
+
+  // 國外：同樣依目前這一段近期活動範圍縮放，不把以前去過的國家一起塞進來。
+  if(km<2){ center={lat:Number(coord[1]),lng:Number(coord[0])}; zoom=15; return; }
+  if(km<8){ applyBoundsView(b,12,15,.62); return; }
+  if(km<30){ applyBoundsView(b,10,13,.66); return; }
+  if(km<100){ applyBoundsView(b,8,11,.70); return; }
+  if(km<300){ applyBoundsView(b,6,9,.74); return; }
+  if(km<900){ applyBoundsView(b,5,8,.78); return; }
+  applyBoundsView(b,3,6,.82);
 }
 
 function updateAnimationCamera(item){
@@ -1562,37 +1673,29 @@ function updateAnimationCamera(item){
   updateAnimationBounds(item.coord);
   const inTaiwan=isTaiwanCoordinate(lat,lng);
   const nextMode=inTaiwan ? "TAIWAN" : "FOREIGN";
+  const jumpKm=haversineKm(animationRegionLastCoord,item.coord);
 
   if(animationRegionMode!==nextMode){
+    // 臺灣 / 國外切換時重新建立當地鏡頭，不沿用上一地區的大範圍。
     animationRegionMode=nextMode;
     animationRegionBounds=null;
-    animationRegionLastCoord=null;
-    if(inTaiwan){
-      setTaiwanAnimationView();
-    }else{
-      resetRegionBounds(item.coord);
-      setForeignAnimationView(item.coord);
-    }
     animationRegionLastCoord=item.coord;
+    resetCameraTrail(item);
+    applySmartLocalView(item.coord,inTaiwan);
     return;
   }
 
-  if(inTaiwan){
-    setTaiwanAnimationView();
+  // 國外若突然跨越很遠距離，直接視為抵達新的區域，重新放大到目的地附近。
+  if(!inTaiwan && jumpKm>1200){
+    animationRegionBounds=null;
+    resetCameraTrail(item);
     animationRegionLastCoord=item.coord;
+    applySmartLocalView(item.coord,false);
     return;
   }
 
-  const jumpKm=haversineKm(animationRegionLastCoord,item.coord);
-  // 國外鏡頭採區域式切換：近距離維持、區域移動適度擴大、長距離直接切新區。
-  if(jumpKm>1200){
-    resetRegionBounds(item.coord);
-  }else if(jumpKm>300){
-    extendRegionBounds(item.coord);
-  }else{
-    extendRegionBounds(item.coord);
-  }
-  setForeignAnimationView(item.coord);
+  addCameraTrail(item);
+  applySmartLocalView(item.coord,inTaiwan);
   animationRegionLastCoord=item.coord;
 }
 
@@ -1885,6 +1988,7 @@ function resetAnimationDrawing(clearUI=true){
   animationRegionMode=null;
   animationRegionBounds=null;
   animationRegionLastCoord=null;
+  animationCameraTrail=[];
   animationCurrentRouteKey=null;
   animationSyntheticLines=[];
   if(clearUI){
@@ -2077,7 +2181,7 @@ animationProgress.addEventListener("input",()=>{
   const wasRunning=animationRunning;
   animationRunning=false;
   if(animationRAF) cancelAnimationFrame(animationRAF);
-  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCurrentRouteKey=null; animationSyntheticLines=[];
+  animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCameraTrail=[]; animationCurrentRouteKey=null; animationSyntheticLines=[];
   animationIndex=0;
   for(let i=0;i<=target;i++){
     consumeAnimationItem(animationItems[i]);
