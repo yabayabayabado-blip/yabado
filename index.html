@@ -156,6 +156,32 @@ button{cursor:pointer}
   font-size:12px;
   background:#fafbfc;
 }
+.travel-filter{
+  display:flex;
+  gap:8px;
+  margin:10px 0 4px;
+}
+.travel-filter button{
+  flex:1;
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:10px;
+  padding:9px 10px;
+  font-weight:700;
+}
+.travel-filter button.active{
+  border-color:var(--accent);
+  background:var(--accent-soft);
+  color:var(--accent);
+}
+.travel-count{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:var(--muted);
+  font-size:12px;
+  padding:0 6px;
+}
 .daynav{
   display:grid;
   grid-template-columns:1fr auto 1fr;
@@ -265,7 +291,7 @@ button{cursor:pointer}
 .mapStatus{
   position:absolute;
   right:8px;
-  bottom:8px;
+  bottom:30px;
   z-index:10;
   padding:5px 8px;
   border-radius:7px;
@@ -273,6 +299,18 @@ button{cursor:pointer}
   color:#5f6368;
   font-size:11px;
   box-shadow:0 1px 5px rgba(0,0,0,.12);
+}
+.mapAttrib{
+  position:absolute;
+  right:8px;
+  bottom:7px;
+  z-index:10;
+  padding:3px 6px;
+  border-radius:5px;
+  background:rgba(255,255,255,.92);
+  color:#5f6368;
+  font-size:10px;
+  line-height:1.2;
 }
 .popup{
   position:absolute;
@@ -316,7 +354,7 @@ button{cursor:pointer}
 <div class="app">
   <aside class="sidebar">
     <h1 class="title">Google 時間軸網頁版</h1>
-    <div class="sub">直接選擇手機匯出的「時間軸.json」。瀏覽器通常會記住上次選檔資料夾；有資料的日期會在月曆上框選，點日期立即顯示當天路線。</div>
+    <div class="sub">直接選擇手機匯出的「時間軸.json」。臺灣自動使用國土測繪中心底圖，國外自動切換全球底圖；同一天跨國也能混合顯示。</div>
 
     <div class="filebox">
       <input id="fileInput" type="file" accept=".json,application/json">
@@ -335,7 +373,12 @@ button{cursor:pointer}
         <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
       </div>
       <div id="days" class="days"></div>
-      <div class="no-data-note">藍框＝有時間軸資料；點選後立即切換地圖。</div>
+      <div class="no-data-note">藍框＝目前可選日期；「出國日」可只顯示臺灣以外有紀錄的日期。</div>
+    </div>
+
+    <div class="travel-filter">
+      <button id="travelFilterBtn">出國日</button>
+      <div id="travelCount" class="travel-count">尚未載入</div>
     </div>
 
     <div class="daynav">
@@ -366,13 +409,14 @@ button{cursor:pointer}
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
     </div>
-    <div class="legend">● 綠：停留　● 紫：起點　● 紅：終點　— 藍：移動路線　｜　最大 Zoom 19</div>
+    <div class="legend">● 綠：停留　● 紫：起點　● 紅：終點　— 藍：移動路線　｜　全球自動底圖 ｜ 最大 Zoom 19</div>
 
     <div id="mapWrap">
       <div id="tiles"></div>
       <canvas id="mapCanvas"></canvas>
       <div id="popup" class="popup"></div>
       <div id="mapStatus" class="mapStatus">請先載入時間軸.json</div>
+      <div class="mapAttrib">臺灣底圖：內政部國土測繪中心 ｜ 國外底圖：© OpenStreetMap contributors</div>
       <div id="empty" class="empty">請從左側選擇「時間軸.json」<br>資料不會上傳，全部在瀏覽器本機解析。</div>
     </div>
   </main>
@@ -384,15 +428,58 @@ button{cursor:pointer}
 const TILE = 256;
 const MIN_ZOOM = 7;
 const MAX_ZOOM = 19;
-const ONLINE_TILE = (z,x,y) => {
-  // Z7～15 使用已確認可正常讀取的 OpenData 圖層
-  if(z <= 15){
-    return `https://wmts.nlsc.gov.tw/wmts/EMAP6_OPENDATA/default/GoogleMapsCompatible/${z}/${y}/${x}`;
+// 每一張圖磚各自判斷來源：臺灣用 NLSC，國外用 OpenStreetMap。
+// 因此同一個畫面／同一天可以同時出現臺灣與國外底圖。
+function tileCenterLonLat(z,x,y){
+  const n=Math.pow(2,z);
+  const lon=((x+0.5)/n)*360-180;
+  const yy=Math.PI*(1-2*((y+0.5)/n));
+  const lat=(180/Math.PI)*Math.atan(Math.sinh(yy));
+  return {lat,lon};
+}
+
+function isTaiwanTile(z,x,y){
+  const p=tileCenterLonLat(z,x,y);
+
+  // 臺灣本島、澎湖、金門、馬祖等常用範圍。
+  // 以圖磚中心判斷，邊界畫面可以自然混用兩種圖資。
+  const mainAndPenghu =
+    p.lon >= 118.0 && p.lon <= 123.0 &&
+    p.lat >= 21.0  && p.lat <= 26.5;
+
+  const kinmen =
+    p.lon >= 118.0 && p.lon <= 118.6 &&
+    p.lat >= 24.2  && p.lat <= 24.7;
+
+  const matsu =
+    p.lon >= 119.8 && p.lon <= 120.6 &&
+    p.lat >= 25.8  && p.lat <= 26.5;
+
+  return mainAndPenghu || kinmen || matsu;
+}
+
+function tileSource(z,x,y){
+  if(isTaiwanTile(z,x,y)){
+    if(z <= 15){
+      return {
+        provider:"NLSC",
+        layer:"EMAP6_OPENDATA",
+        url:`https://wmts.nlsc.gov.tw/wmts/EMAP6_OPENDATA/default/GoogleMapsCompatible/${z}/${y}/${x}`
+      };
+    }
+    return {
+      provider:"NLSC",
+      layer:"EMAP6",
+      url:`https://wmts.nlsc.gov.tw/wmts/EMAP6/default/GoogleMapsCompatible/${z}/${y}/${x}`
+    };
   }
 
-  // Z16～19 自動切換至 EMAP6 高層級圖資
-  return `https://wmts.nlsc.gov.tw/wmts/EMAP6/default/GoogleMapsCompatible/${z}/${y}/${x}`;
-};
+  return {
+    provider:"OSM",
+    layer:"OpenStreetMap",
+    url:`https://tile.openstreetmap.org/${z}/${x}/${y}.png`
+  };
+}
 
 const $ = id => document.getElementById(id);
 
@@ -403,6 +490,8 @@ const calTitle = $("calTitle");
 const currentDateEl = $("currentDate");
 const prevDataDay = $("prevDataDay");
 const nextDataDay = $("nextDataDay");
+const travelFilterBtn = $("travelFilterBtn");
+const travelCount = $("travelCount");
 const showRaw = $("showRaw");
 const recordsEl = $("records");
 const tilesEl = $("tiles");
@@ -417,6 +506,9 @@ let allFeatures = [];
 let dateIndex = new Map();
 let dataDates = [];
 let selectedDate = null;
+let foreignDates = [];
+let foreignDateSet = new Set();
+let travelFilterOn = false;
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 
@@ -667,6 +759,58 @@ function parseTimeline(data){
   return {features:f,formats};
 }
 
+// ---------- Foreign-day detection ----------
+function isTaiwanCoordinate(lat,lon){
+  const mainAndPenghu =
+    lon >= 118.0 && lon <= 123.0 &&
+    lat >= 21.0  && lat <= 26.5;
+
+  const kinmen =
+    lon >= 118.0 && lon <= 118.6 &&
+    lat >= 24.2 && lat <= 24.7;
+
+  const matsu =
+    lon >= 119.8 && lon <= 120.6 &&
+    lat >= 25.8 && lat <= 26.5;
+
+  return mainAndPenghu || kinmen || matsu;
+}
+
+function featureHasForeignCoordinate(feature){
+  const g=feature.geometry||{};
+
+  if(g.type==="Point"){
+    const c=g.coordinates||[];
+    if(c.length<2) return false;
+    return !isTaiwanCoordinate(Number(c[1]),Number(c[0]));
+  }
+
+  if(g.type==="LineString"){
+    const coords=g.coordinates||[];
+    for(const c of coords){
+      if(c && c.length>=2 && !isTaiwanCoordinate(Number(c[1]),Number(c[0]))){
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function buildForeignDates(index){
+  const out=[];
+  for(const [date,features] of index.entries()){
+    if(features.some(featureHasForeignCoordinate)){
+      out.push(date);
+    }
+  }
+  return out.sort();
+}
+
+function activeDateList(){
+  return travelFilterOn ? foreignDates : dataDates;
+}
+
 // ---------- Date index / calendar ----------
 function featureDate(f){
   const p=f.properties||{};
@@ -724,17 +868,18 @@ function renderCalendar(){
     const key=fmtDate(y,m,d);
     const btn=document.createElement("button");
     btn.className="day"+(inCurrent?" current-month":"");
-    if(dateIndex.has(key)) btn.classList.add("has-data");
+    const dateAllowed = travelFilterOn ? foreignDateSet.has(key) : dateIndex.has(key);
+    if(dateAllowed) btn.classList.add("has-data");
     if(key===selectedDate) btn.classList.add("selected");
     if(key===todayKey) btn.classList.add("today");
     btn.innerHTML=`<span class="num">${d}</span>`;
 
-    if(dateIndex.has(key)){
+    if(dateAllowed){
       btn.onclick=()=>selectDate(key,true);
-      btn.title=`${key} 有時間軸資料`;
+      btn.title=travelFilterOn ? `${key} 為出國日` : `${key} 有時間軸資料`;
     }else{
       btn.disabled=true;
-      btn.title=`${key} 無時間軸資料`;
+      btn.title=travelFilterOn ? `${key} 無國外時間軸資料` : `${key} 無時間軸資料`;
     }
     daysEl.appendChild(btn);
   }
@@ -760,9 +905,10 @@ function selectDate(date, syncCalendar=true){
 }
 
 function updateDayNav(){
-  const idx=dataDates.indexOf(selectedDate);
+  const list=activeDateList();
+  const idx=list.indexOf(selectedDate);
   prevDataDay.disabled=idx<=0;
-  nextDataDay.disabled=idx<0 || idx>=dataDates.length-1;
+  nextDataDay.disabled=idx<0 || idx>=list.length-1;
 }
 
 $("prevMonth").onclick=()=>{
@@ -779,12 +925,52 @@ $("prevYear").onclick=()=>{calendarYear--;renderCalendar()};
 $("nextYear").onclick=()=>{calendarYear++;renderCalendar()};
 
 prevDataDay.onclick=()=>{
-  const i=dataDates.indexOf(selectedDate);
-  if(i>0) selectDate(dataDates[i-1],true);
+  const list=activeDateList();
+  const i=list.indexOf(selectedDate);
+  if(i>0) selectDate(list[i-1],true);
 };
 nextDataDay.onclick=()=>{
-  const i=dataDates.indexOf(selectedDate);
-  if(i>=0 && i<dataDates.length-1) selectDate(dataDates[i+1],true);
+  const list=activeDateList();
+  const i=list.indexOf(selectedDate);
+  if(i>=0 && i<list.length-1) selectDate(list[i+1],true);
+};
+
+travelFilterBtn.onclick=()=>{
+  if(!dataDates.length) return;
+
+  travelFilterOn=!travelFilterOn;
+  travelFilterBtn.classList.toggle("active",travelFilterOn);
+  travelFilterBtn.textContent=travelFilterOn ? "出國日：開啟" : "出國日";
+
+  const list=activeDateList();
+
+  if(travelFilterOn){
+    if(!list.length){
+      travelFilterOn=false;
+      travelFilterBtn.classList.remove("active");
+      travelFilterBtn.textContent="出國日";
+      alert("目前時間軸中沒有偵測到臺灣以外的日期。");
+      renderCalendar();
+      updateDayNav();
+      return;
+    }
+
+    // 若目前不是出國日，直接跳到最近一個出國日。
+    if(!foreignDateSet.has(selectedDate)){
+      let target=list[0];
+      for(const d of list){
+        if(d >= selectedDate){
+          target=d;
+          break;
+        }
+      }
+      selectDate(target,true);
+      return;
+    }
+  }
+
+  renderCalendar();
+  updateDayNav();
 };
 
 // ---------- Map ----------
@@ -830,6 +1016,7 @@ function resizeCanvas(){
 function renderTiles(){
   tilesEl.innerHTML="";
   tileOK=0;tileBad=0;
+  const providersUsed=new Set();
   const w=mapWrap.clientWidth,h=mapWrap.clientHeight;
   const c=worldCenter();
   const left=c.x-w/2,top=c.y-h/2,n=Math.pow(2,zoom);
@@ -843,28 +1030,39 @@ function renderTiles(){
     for(let ty=minTY;ty<=maxTY;ty++){
       if(tx<0||tx>=n||ty<0||ty>=n) continue;
 
+      const src=tileSource(zoom,tx,ty);
+      providersUsed.add(src.provider);
+
       const img=document.createElement("img");
       img.className="tile";
-      img.src=ONLINE_TILE(zoom,tx,ty);
+      img.src=src.url;
+      img.referrerPolicy="strict-origin-when-cross-origin";
       img.style.left=(tx*TILE-left)+"px";
       img.style.top=(ty*TILE-top)+"px";
       img.alt="";
+      img.dataset.provider=src.provider;
+      img.dataset.layer=src.layer;
+
       img.onload=()=>{
         tileOK++;
         if(tileOK>1){
-          const layerName = zoom <= 15 ? "EMAP6_OPENDATA" : "EMAP6";
-          mapStatus.textContent=`線上底圖：${layerName}　Zoom ${zoom}`;
+          const used=[...providersUsed];
+          if(used.includes("NLSC") && used.includes("OSM")){
+            mapStatus.textContent=`混合底圖：臺灣 NLSC ＋ 國外 OSM　Zoom ${zoom}`;
+          }else if(used.includes("NLSC")){
+            const layerName=zoom<=15?"EMAP6_OPENDATA":"EMAP6";
+            mapStatus.textContent=`臺灣底圖：${layerName}　Zoom ${zoom}`;
+          }else{
+            mapStatus.textContent=`全球底圖：OpenStreetMap　Zoom ${zoom}`;
+          }
         }
       };
+
       img.onerror=()=>{
         tileBad++;
         img.remove();
         if(tileOK===0 && tileBad>2){
-          if(zoom >= 16){
-            mapStatus.textContent=`Zoom ${zoom} 高層級圖資載入失敗`;
-          }else{
-            mapStatus.textContent="底圖載入失敗／目前無網路";
-          }
+          mapStatus.textContent=`Zoom ${zoom} 背景圖資載入失敗／請檢查網路`;
         }
       };
       tilesEl.appendChild(img);
@@ -1119,6 +1317,12 @@ fileInput.addEventListener("change",async e=>{
     allFeatures=parsed.features;
     dateIndex=buildDateIndex(allFeatures);
     dataDates=[...dateIndex.keys()].sort();
+    foreignDates=buildForeignDates(dateIndex);
+    foreignDateSet=new Set(foreignDates);
+    travelFilterOn=false;
+    travelFilterBtn.classList.remove("active");
+    travelFilterBtn.textContent="出國日";
+    travelCount.textContent=`出國日：${foreignDates.length.toLocaleString()} 天`;
 
     if(!dataDates.length){
       throw new Error("時間軸中沒有可辨識的日期。");
@@ -1152,6 +1356,12 @@ fileInput.addEventListener("change",async e=>{
     allFeatures=[];
     dateIndex=new Map();
     dataDates=[];
+    foreignDates=[];
+    foreignDateSet=new Set();
+    travelFilterOn=false;
+    travelFilterBtn.classList.remove("active");
+    travelFilterBtn.textContent="出國日";
+    travelCount.textContent="尚未載入";
     selectedDate=null;
     fileInfo.textContent="讀取失敗："+err.message;
     daysEl.innerHTML="";
