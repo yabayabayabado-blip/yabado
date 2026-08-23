@@ -32,7 +32,10 @@ button{cursor:pointer}
 .sidebar{
   background:var(--panel);
   border-right:1px solid var(--line);
-  overflow:auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  scroll-behavior:auto;
+  scrollbar-gutter:stable;
   padding:16px;
 }
 .main{
@@ -352,11 +355,11 @@ button{cursor:pointer}
 </head>
 <body>
 <div class="app">
-  <aside class="sidebar">
+  <aside id="sidebar" class="sidebar">
     <h1 class="title">Google 時間軸網頁版</h1>
     <div class="sub">直接選擇手機匯出的「時間軸.json」。臺灣自動使用國土測繪中心底圖，國外自動切換全球底圖；同一天跨國也能混合顯示。</div>
 
-    <div class="filebox">
+    <div id="fileBox" class="filebox">
       <input id="fileInput" type="file" accept=".json,application/json">
       <div id="fileInfo" class="fileinfo">尚未載入時間軸.json</div>
     </div>
@@ -381,7 +384,7 @@ button{cursor:pointer}
       <div id="travelCount" class="travel-count">尚未載入</div>
     </div>
 
-    <div class="daynav">
+    <div id="dayNav" class="daynav">
       <button id="prevDataDay">← 上一個有資料日</button>
       <div id="currentDate" class="current-date">尚未選擇</div>
       <button id="nextDataDay">下一個有資料日 →</button>
@@ -483,6 +486,9 @@ function tileSource(z,x,y){
 
 const $ = id => document.getElementById(id);
 
+const sidebar = $("sidebar");
+const fileBox = $("fileBox");
+const dayNav = $("dayNav");
 const fileInput = $("fileInput");
 const fileInfo = $("fileInfo");
 const daysEl = $("days");
@@ -971,6 +977,9 @@ travelFilterBtn.onclick=()=>{
 
   renderCalendar();
   updateDayNav();
+
+  // 切換出國日模式後維持操作區位置。
+  positionSidebarForCalendar();
 };
 
 // ---------- Map ----------
@@ -1284,6 +1293,39 @@ showRaw.onchange=()=>{if(selectedDate) renderSelectedDate()};
 
 window.addEventListener("resize",()=>{if(selectedDate) renderMap()});
 
+// ---------- Sidebar auto positioning ----------
+function positionSidebarForCalendar(){
+  if(!sidebar || !fileBox || !dayNav) return;
+
+  requestAnimationFrame(()=>{
+    const sidebarRect=sidebar.getBoundingClientRect();
+    const fileRect=fileBox.getBoundingClientRect();
+    const dayRect=dayNav.getBoundingClientRect();
+
+    // 希望畫面從檔案資訊區開始，同時盡量讓換日按鈕完整露出。
+    const currentTop=sidebar.scrollTop;
+    const fileTopInScroll=currentTop + (fileRect.top - sidebarRect.top);
+    const dayBottomInScroll=currentTop + (dayRect.bottom - sidebarRect.top);
+
+    const usableHeight=sidebar.clientHeight - 12;
+    let target=fileTopInScroll - 2;
+
+    // 若從檔案區開始會讓下方換日按鈕超出畫面，
+    // 則精準往下移到剛好能完整看見換日列。
+    const neededBottom=target + usableHeight;
+    if(dayBottomInScroll > neededBottom){
+      target += (dayBottomInScroll - neededBottom);
+    }
+
+    target=Math.max(0,target);
+
+    sidebar.scrollTo({
+      top: target,
+      behavior: "auto"
+    });
+  });
+}
+
 // ---------- File load ----------
 
 try{
@@ -1350,6 +1392,9 @@ fileInput.addEventListener("change",async e=>{
     renderCalendar();
     selectDate(targetDate,true);
     mapStatus.textContent="線上底圖：準備載入";
+
+    // JSON 載入完成後，自動將左側定位到完整操作區。
+    positionSidebarForCalendar();
 
   }catch(err){
     console.error(err);
