@@ -264,6 +264,27 @@ button{cursor:pointer}
   padding:8px 11px;
 }
 .toolbar button:hover{background:#f8fafc}.toolbar button#fitBtn{font-weight:700;border-color:#9bbcf5;background:#f5f9ff}
+.usage-counter{
+  margin-left:auto;
+  display:grid;
+  grid-template-columns:repeat(2,auto);
+  gap:2px 12px;
+  align-items:center;
+  padding:5px 9px;
+  border:1px solid var(--line);
+  border-radius:9px;
+  background:rgba(255,255,255,.96);
+  color:#5f6368;
+  font-size:11px;
+  line-height:1.45;
+  white-space:nowrap;
+}
+.usage-counter .usage-item{display:flex;gap:4px;align-items:baseline}
+.usage-counter .usage-label{color:var(--muted)}
+.usage-counter .usage-value{color:#2c3e50;font-weight:800;font-variant-numeric:tabular-nums;min-width:18px;text-align:right}
+@media(max-width:1100px){
+  .usage-counter{width:100%;margin-left:0;grid-template-columns:repeat(4,auto);justify-content:flex-start;overflow-x:auto}
+}
 .animbar{
   flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
 .animbar button,.animbar select{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 10px}
@@ -476,6 +497,12 @@ body.capture-clean .mapStatus{bottom:28px}
       <button id="fitBtn">縮放至當日全部路線</button>
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
+      <div class="usage-counter" aria-label="網站使用人次">
+        <div class="usage-item"><span class="usage-label">今日瀏覽</span><span id="todayCount" class="usage-value">—</span></div>
+        <div class="usage-item"><span class="usage-label">累積瀏覽</span><span id="totalCount" class="usage-value">—</span></div>
+        <div class="usage-item"><span class="usage-label">今日載入</span><span id="jsonTodayCount" class="usage-value">—</span></div>
+        <div class="usage-item"><span class="usage-label">累積載入</span><span id="jsonTotalCount" class="usage-value">—</span></div>
+      </div>
     </div>
 
     <div id="mapWrap">
@@ -3502,6 +3529,140 @@ async function exportAnimationAndWorld(){
 
 exportBothBtn.addEventListener("click",exportAnimationAndWorld);
 
+// ---------- Google Sheets usage counter ----------
+const COUNTER_API_URL = "https://script.google.com/macros/s/AKfycbwcTghitEU1hRd8hM5obOcBitqJ4kgPxa2iNR-z9YTxWQxFR5poC23Xx6XPRQ2c2NvnWg/exec";
+const COUNTER_TOKEN = "G7kP4zX9mQa2Lr8VtY6bN1cHd3FjW5uSe0RpT8vKq2ZxLm9AsD4hJ7nBf6UyC1e";
+const COUNTER_PAGE_KEY = "google_timeline_page_hit_v3";
+const COUNTER_JSON_KEY = "google_timeline_json_hit_v3";
+const COUNTER_CACHE_KEY = "google_timeline_counter_cache_v3";
+let counterRequestSerial = 0;
+let counterJsonRequestRunning = false;
+
+function counterTaiwanDateKey(){
+  try{
+    const parts=new Intl.DateTimeFormat("en-CA",{
+      timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"
+    }).formatToParts(new Date());
+    const map={};
+    parts.forEach(p=>{map[p.type]=p.value;});
+    return `${map.year}-${map.month}-${map.day}`;
+  }catch(_e){
+    const d=new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  }
+}
+
+function counterShow(data){
+  if(!data) return;
+  const pairs=[
+    ["todayCount",data.today],["totalCount",data.total],
+    ["jsonTodayCount",data.jsonToday],["jsonTotalCount",data.jsonTotal]
+  ];
+  for(const [id,value] of pairs){
+    const el=$(id);
+    if(el && value!==undefined && value!==null) el.textContent=Number(value).toLocaleString("zh-TW");
+  }
+}
+
+function counterSaveCache(data){
+  try{
+    localStorage.setItem(COUNTER_CACHE_KEY,JSON.stringify({
+      today:data.today,total:data.total,jsonToday:data.jsonToday,jsonTotal:data.jsonTotal,
+      todayKey:data.todayKey||"",savedAt:Date.now()
+    }));
+  }catch(_e){}
+}
+
+function counterLoadCache(){
+  try{
+    const raw=localStorage.getItem(COUNTER_CACHE_KEY);
+    if(!raw) return false;
+    counterShow(JSON.parse(raw));
+    return true;
+  }catch(_e){return false;}
+}
+
+function counterCountedToday(key){
+  try{return localStorage.getItem(key)===counterTaiwanDateKey();}
+  catch(_e){return true;}
+}
+
+function counterMarkToday(key){
+  try{localStorage.setItem(key,counterTaiwanDateKey());}catch(_e){}
+}
+
+function counterRequest(action,onDone){
+  counterRequestSerial++;
+  const callbackName=`__timelineCounter_${Date.now()}_${counterRequestSerial}`;
+  const script=document.createElement("script");
+  let finished=false;
+  const cleanup=()=>{
+    try{delete window[callbackName];}catch(_e){}
+    if(script.parentNode) script.parentNode.removeChild(script);
+  };
+  const timer=setTimeout(()=>{
+    if(finished) return;
+    finished=true;
+    cleanup();
+    if(typeof onDone==="function") onDone(false);
+  },15000);
+
+  window[callbackName]=(data)=>{
+    if(finished) return;
+    finished=true;
+    clearTimeout(timer);
+    cleanup();
+    const ok=Boolean(data && data.ok && !data.error);
+    if(ok){counterShow(data);counterSaveCache(data);}
+    if(typeof onDone==="function") onDone(ok);
+  };
+
+  let url=`${COUNTER_API_URL}?action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}&t=${Date.now()}`;
+  if(action==="hit" || action==="json_hit") url+=`&token=${encodeURIComponent(COUNTER_TOKEN)}`;
+  script.src=url;
+  script.async=true;
+  script.onerror=()=>{
+    if(finished) return;
+    finished=true;
+    clearTimeout(timer);
+    cleanup();
+    if(typeof onDone==="function") onDone(false);
+  };
+  document.head.appendChild(script);
+}
+
+function counterRefresh(){counterRequest("get");}
+
+function counterCountPageOnce(){
+  if(counterCountedToday(COUNTER_PAGE_KEY)){
+    counterRefresh();
+    return;
+  }
+  // 送出前先鎖定本日，避免 F5 或快速重開時重複 +1。
+  counterMarkToday(COUNTER_PAGE_KEY);
+  counterRequest("hit",ok=>{
+    if(!ok) counterRefresh();
+  });
+}
+
+window.recordJsonLoadSuccess=function(){
+  if(counterJsonRequestRunning) return;
+  if(counterCountedToday(COUNTER_JSON_KEY)){
+    counterRefresh();
+    return;
+  }
+  counterJsonRequestRunning=true;
+  // 只有走到 JSON 完整解析成功後才會呼叫此函式；同一天只送一次。
+  counterMarkToday(COUNTER_JSON_KEY);
+  counterRequest("json_hit",ok=>{
+    counterJsonRequestRunning=false;
+    if(!ok) counterRefresh();
+  });
+};
+
+counterLoadCache();
+counterCountPageOnce();
+
 // ---------- Sidebar auto positioning ----------
 function positionSidebarForCalendar(){
   if(!sidebar || !calendarPanel) return;
@@ -3591,6 +3752,11 @@ fileInput.addEventListener("change",async e=>{
 
     // JSON 載入完成後，自動將左側定位到完整操作區。
     positionSidebarForCalendar();
+
+    // 確認 JSON 已成功解析、建立動畫索引與日期資料後，才計入「成功載入 JSON」。
+    if(typeof window.recordJsonLoadSuccess === "function"){
+      window.recordJsonLoadSuccess();
+    }
 
   }catch(err){
     console.error(err);
