@@ -266,36 +266,42 @@ button{cursor:pointer}
 .toolbar button:hover{background:#f8fafc}.toolbar button#fitBtn{font-weight:700;border-color:#9bbcf5;background:#f5f9ff}
 .usage-counter{
   margin-left:auto;
+  flex:0 0 auto;
   display:grid;
-  grid-template-columns:repeat(2,auto);
-  gap:2px 12px;
+  grid-template-columns:repeat(2,max-content);
+  gap:1px 8px;
   align-items:center;
-  padding:5px 9px;
+  padding:3px 6px;
   border:1px solid var(--line);
-  border-radius:9px;
+  border-radius:8px;
   background:rgba(255,255,255,.96);
   color:#5f6368;
-  font-size:11px;
-  line-height:1.45;
+  font-size:10px;
+  line-height:1.25;
   white-space:nowrap;
 }
-.usage-counter .usage-item{display:flex;gap:4px;align-items:baseline}
+.usage-counter .usage-item{display:flex;gap:3px;align-items:baseline}
 .usage-counter .usage-label{color:var(--muted)}
-.usage-counter .usage-value{color:#2c3e50;font-weight:800;font-variant-numeric:tabular-nums;min-width:18px;text-align:right}
-@media(max-width:1100px){
-  .usage-counter{width:100%;margin-left:0;grid-template-columns:repeat(4,auto);justify-content:flex-start;overflow-x:auto}
-}
+.usage-counter .usage-value{color:#2c3e50;font-weight:800;font-variant-numeric:tabular-nums;min-width:12px;text-align:right}
 .animbar{
-  flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+  flex:0 0 auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.anim-top-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:nowrap;
+  width:100%;
+  min-width:0;
+}
 .animbar button,.animbar select{border:1px solid var(--line);background:#fff;border-radius:9px;padding:7px 10px}
 .animbar button.primary{font-weight:800;border-color:#8ab4f8;background:#f5f9ff;color:#174ea6}
 .animbar button:disabled{opacity:.45;cursor:not-allowed}
 .animbar label{font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center}
-.speed-slider-label{min-width:250px}
-.speed-slider-label input[type=range]{width:170px;accent-color:var(--accent)}
+.speed-slider-label{min-width:0;flex:0 1 auto}
+.speed-slider-label input[type=range]{width:135px;accent-color:var(--accent)}
 .km-counter{display:flex;align-items:baseline;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;white-space:nowrap}
 .km-counter .km-label{font-size:12px;color:var(--muted)}
-.km-counter .km-value{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;color:#b3261e;min-width:92px;text-align:right}
+.km-counter .km-value{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;color:#b3261e;min-width:60px;text-align:right}
 .km-counter .km-unit{font-size:12px;color:var(--muted)}
 .speed-value{min-width:42px;text-align:right;font-weight:800;color:#174ea6;font-variant-numeric:tabular-nums}
 .anim-progress{display:grid;grid-template-columns:auto minmax(140px,1fr) auto;gap:8px;align-items:center;width:100%;font-size:12px;color:var(--muted)}
@@ -458,31 +464,39 @@ body.capture-clean .mapStatus{bottom:28px}
 
   <main class="main">
     <div class="animbar">
-      <button id="playHistoryBtn" class="primary">▶ 歷史動畫</button>
-      <button id="pauseHistoryBtn" disabled>⏸ 暫停</button>
-      <button id="stopHistoryBtn" disabled>■ 停止</button>
-      <label>範圍
-        <select id="animationScope">
-          <option value="all">全部歷史</option>
-          <option value="trip">單一出國旅程</option>
-          <option value="month">目前月份</option>
-          <option value="day">目前日期</option>
-          <option value="foreign">全部出國日</option>
-        </select>
-      </label>
-      <label id="tripSelectLabel" style="display:none">旅程
-        <select id="tripSelect" disabled></select>
-      </label>
-      <label class="speed-slider-label">速度
-        <input id="animationSpeed" type="range" min="0" max="14" step="1" value="5" aria-label="動畫播放速度（鏡頭速度獨立）">
-        <span id="animationSpeedValue" class="speed-value">10×</span>
-      </label>
-      <div class="km-counter" title="依動畫目前已走過的連續軌跡累計">
-        <span class="km-label">累積路線</span>
-        <span id="animationKmValue" class="km-value">0.0</span>
-        <span class="km-unit">km</span>
+      <div class="anim-top-row">
+        <button id="playHistoryBtn" class="primary">▶ 歷史動畫</button>
+        <button id="pauseHistoryBtn" disabled>⏸ 暫停</button>
+        <button id="stopHistoryBtn" disabled>■ 停止</button>
+        <label>範圍
+          <select id="animationScope">
+            <option value="all">全部歷史</option>
+            <option value="trip">單一出國旅程</option>
+            <option value="month">目前月份</option>
+            <option value="day">目前日期</option>
+            <option value="foreign">全部出國日</option>
+          </select>
+        </label>
+        <label id="tripSelectLabel" style="display:none">旅程
+          <select id="tripSelect" disabled></select>
+        </label>
+        <label class="speed-slider-label">速度
+          <input id="animationSpeed" type="range" min="0" max="14" step="1" value="5" aria-label="動畫播放速度（鏡頭速度獨立）">
+          <span id="animationSpeedValue" class="speed-value">10×</span>
+        </label>
+        <div class="km-counter" title="依動畫目前已走過的連續軌跡累計">
+          <span class="km-label">累積路線</span>
+          <span id="animationKmValue" class="km-value">0.0</span>
+          <span class="km-unit">km</span>
+        </div>
+        <label><input id="animationFollow" type="checkbox" checked> 自動跟隨</label>
+        <div class="usage-counter" aria-label="網站使用人次">
+          <div class="usage-item"><span class="usage-label">今日瀏覽</span><span id="todayCount" class="usage-value">—</span></div>
+          <div class="usage-item"><span class="usage-label">累積瀏覽</span><span id="totalCount" class="usage-value">—</span></div>
+          <div class="usage-item"><span class="usage-label">今日載入</span><span id="jsonTodayCount" class="usage-value">—</span></div>
+          <div class="usage-item"><span class="usage-label">累積載入</span><span id="jsonTotalCount" class="usage-value">—</span></div>
+        </div>
       </div>
-      <label><input id="animationFollow" type="checkbox" checked> 自動跟隨</label>
       <div class="anim-progress">
         <span id="animationStartLabel">—</span>
         <input id="animationProgress" type="range" min="0" max="1000" value="0" disabled>
@@ -497,12 +511,6 @@ body.capture-clean .mapStatus{bottom:28px}
       <button id="fitBtn">縮放至當日全部路線</button>
       <button id="zoomInBtn">放大</button>
       <button id="zoomOutBtn">縮小</button>
-      <div class="usage-counter" aria-label="網站使用人次">
-        <div class="usage-item"><span class="usage-label">今日瀏覽</span><span id="todayCount" class="usage-value">—</span></div>
-        <div class="usage-item"><span class="usage-label">累積瀏覽</span><span id="totalCount" class="usage-value">—</span></div>
-        <div class="usage-item"><span class="usage-label">今日載入</span><span id="jsonTodayCount" class="usage-value">—</span></div>
-        <div class="usage-item"><span class="usage-label">累積載入</span><span id="jsonTotalCount" class="usage-value">—</span></div>
-      </div>
     </div>
 
     <div id="mapWrap">
