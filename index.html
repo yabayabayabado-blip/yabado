@@ -777,8 +777,11 @@ let animationPendingCrossDayBridge = null; // 跨日缺口：等標點實際走�
 let animationTweenPath = null;               // 飛行／跨日補線的逐步繪製路徑
 let animationLastItem = null;                // 上一筆動畫資料
 let animationFlightMode = false;              // 飛航期間強制使用全球 OSM 大圖
-let animationFlightRestoreSpeed = null;        // 飛航結束後恢復原自動倍速
+let animationFlightRestoreSpeed = null;        // 飛航完成後回到進入飛航前的正常倍速狀態
 let animationTweenIsFlight = false;            // 目前 tween 是否為飛航拋物線
+let flightAudioContext = null;                  // Web Audio：飛航音效，不依賴外部 mp3
+let flightAudioState = null;                    // 目前飛航音效／音效時鐘狀態
+const FLIGHT_AUDIO_DURATION_SEC = 8.2;          // 起飛 + 飛行 + 降落完整音效長度；飛行線以此為時間軸
 let animationCompletedFlightPairs = [];         // 已辨識飛航的起終點，永久排除同端點的普通直線/route
 let animationFlightLandingIndex = -1;             // 飛航完成後用來預判落地後鏡頭
 let animationLandingPhase = null;                  // 落地後：先國家總覽，再切到當地尺度
@@ -2352,22 +2355,108 @@ function drawOverlay(){
       ctx.restore();
     }
 
-    // 目前位置標點：只有一顆，連續移動時採連續插值位置，不會一筆一筆瞬移。
+    // 目前位置標記：一般移動維持紅點；飛航期間改成沿弧線方向旋轉的小飛機。
     const markerCoord=animationDisplayCoord||animationLastCoord;
     if(markerCoord){
       const q=screenPoint(markerCoord[0],markerCoord[1]);
-      ctx.save();
-      ctx.shadowColor="rgba(0,0,0,.28)";
-      ctx.shadowBlur=7;
-      ctx.beginPath();
-      ctx.arc(q.x,q.y,8,0,Math.PI*2);
-      ctx.fillStyle="#d93025";
-      ctx.fill();
-      ctx.shadowBlur=0;
-      ctx.lineWidth=3;
-      ctx.strokeStyle="#ffffff";
-      ctx.stroke();
-      ctx.restore();
+      const showFlightPlane=Boolean(animationTweenIsFlight && animationTweenPath && animationTweenPath.length>=2 && animationTweenProgress<1);
+      if(showFlightPlane){
+        const rawT=Math.max(0,Math.min(1,animationTweenProgress));
+        const visualT=rawT*rawT*(3-2*rawT);
+        const t0=Math.max(0,visualT-0.012);
+        const t1=Math.min(1,visualT+0.012);
+        const c0=pointAlongPath(animationTweenPath,t0);
+        const c1=pointAlongPath(animationTweenPath,t1);
+        const q0=screenPoint(c0[0],c0[1]);
+        const q1=screenPoint(c1[0],c1[1]);
+        const angle=Math.atan2(q1.y-q0.y,q1.x-q0.x);
+
+        ctx.save();
+        ctx.translate(q.x,q.y);
+        ctx.rotate(angle);
+        ctx.shadowColor="rgba(0,0,0,.34)";
+        ctx.shadowBlur=6;
+        ctx.shadowOffsetY=2;
+
+        // 民航載客機俯視剪影：長機身、後掠主翼、水平尾翼與垂直尾翼。
+        // 機頭固定朝右，再依飛行路徑旋轉；整體約 38x30 px。
+        ctx.beginPath();
+        ctx.moveTo(19,0);                 // 圓潤機鼻
+        ctx.bezierCurveTo(16,-2.2,13,-2.8,9,-3.1);
+        ctx.lineTo(2,-3.5);              // 前機身
+        ctx.lineTo(-4,-13.5);            // 右側主翼前緣
+        ctx.lineTo(-8,-13.5);
+        ctx.lineTo(-5,-3.8);             // 右側主翼後緣
+        ctx.lineTo(-12,-3.1);            // 後機身
+        ctx.lineTo(-16,-7.2);            // 右側水平尾翼
+        ctx.lineTo(-19,-7.2);
+        ctx.lineTo(-17,-2.3);
+        ctx.lineTo(-20,-1.4);            // 垂直尾翼可視突出
+        ctx.lineTo(-20,1.4);
+        ctx.lineTo(-17,2.3);
+        ctx.lineTo(-19,7.2);             // 左側水平尾翼
+        ctx.lineTo(-16,7.2);
+        ctx.lineTo(-12,3.1);
+        ctx.lineTo(-5,3.8);              // 左側主翼後緣
+        ctx.lineTo(-8,13.5);
+        ctx.lineTo(-4,13.5);             // 左側主翼前緣
+        ctx.lineTo(2,3.5);
+        ctx.lineTo(9,3.1);
+        ctx.bezierCurveTo(13,2.8,16,2.2,19,0);
+        ctx.closePath();
+        ctx.fillStyle="#ffffff";
+        ctx.fill();
+        ctx.shadowBlur=0;
+        ctx.shadowOffsetY=0;
+        ctx.lineWidth=2;
+        ctx.strokeStyle="#b3261e";
+        ctx.stroke();
+
+        // 機身紅色識別線。
+        ctx.beginPath();
+        ctx.moveTo(-15,0);
+        ctx.lineTo(15,0);
+        ctx.strokeStyle="#d93025";
+        ctx.lineWidth=2;
+        ctx.lineCap="round";
+        ctx.stroke();
+
+        // 駕駛艙窗：讓輪廓更接近一般民航客機。
+        ctx.beginPath();
+        ctx.moveTo(12.2,-1.15);
+        ctx.lineTo(15.2,-0.65);
+        ctx.moveTo(12.2,1.15);
+        ctx.lineTo(15.2,0.65);
+        ctx.strokeStyle="#374151";
+        ctx.lineWidth=1.05;
+        ctx.lineCap="round";
+        ctx.stroke();
+
+        // 左右引擎短橢圓，置於主翼下方位置。
+        for(const ey of [-6.1,6.1]){
+          ctx.beginPath();
+          ctx.ellipse(-1.2,ey,3.2,1.45,0,0,Math.PI*2);
+          ctx.fillStyle="#f8fafc";
+          ctx.fill();
+          ctx.lineWidth=1.15;
+          ctx.strokeStyle="#b3261e";
+          ctx.stroke();
+        }
+        ctx.restore();
+      }else{
+        ctx.save();
+        ctx.shadowColor="rgba(0,0,0,.28)";
+        ctx.shadowBlur=7;
+        ctx.beginPath();
+        ctx.arc(q.x,q.y,8,0,Math.PI*2);
+        ctx.fillStyle="#d93025";
+        ctx.fill();
+        ctx.shadowBlur=0;
+        ctx.lineWidth=3;
+        ctx.strokeStyle="#ffffff";
+        ctx.stroke();
+        ctx.restore();
+      }
     }
   }
 
@@ -3127,6 +3216,7 @@ function resetAnimationDrawing(clearUI=true){
   animationTweenPath=null;
   animationLastItem=null;
   animationFlightMode=false;
+  stopFlightAudio();
   animationFlightRestoreSpeed=null;
   animationTweenIsFlight=false;
   animationCompletedFlightPairs=[];
@@ -3391,19 +3481,154 @@ function setFlightWorldView(fromCoord,toCoord){
 }
 
 function flightTweenDuration(km,speed){
-  // 自動飛航會先降到 2×，讓使用者看得到「國家 -> 國家」的飛行感。
-  // 若使用者已手動指定倍速，仍尊重手動值，但保留最低可見時間。
-  const s=Math.max(0.5,Number(speed)||1);
-  const base=Math.max(3600,Math.min(7600,2800+km*1.35));
-  return Math.max(900,Math.round(base/Math.sqrt(s/2)));
+  // 保留舊函式名稱供相容使用；正式飛航改由音效實際長度控制，不再由倍速控制。
+  return Math.round(FLIGHT_AUDIO_DURATION_SEC*1000);
+}
+
+function getFlightAudioContext(){
+  if(flightAudioContext) return flightAudioContext;
+  const AudioCtx=window.AudioContext||window.webkitAudioContext;
+  if(!AudioCtx) return null;
+  try{ flightAudioContext=new AudioCtx(); }catch(_e){ flightAudioContext=null; }
+  return flightAudioContext;
+}
+
+function primeFlightAudio(){
+  const ac=getFlightAudioContext();
+  if(!ac) return;
+  try{ if(ac.state==="suspended") ac.resume().catch(()=>{}); }catch(_e){}
+}
+
+function stopFlightAudio(){
+  if(flightAudioState && Array.isArray(flightAudioState.nodes)){
+    for(const n of flightAudioState.nodes){
+      try{ if(n && typeof n.stop==="function") n.stop(); }catch(_e){}
+      try{ if(n && typeof n.disconnect==="function") n.disconnect(); }catch(_e){}
+    }
+  }
+  flightAudioState=null;
+}
+
+function armFlightAudio(){
+  stopFlightAudio();
+  flightAudioState={armed:true,started:false,useAudioClock:false,startTime:0,durationSec:FLIGHT_AUDIO_DURATION_SEC,nodes:[]};
+}
+
+function makeFlightNoiseBuffer(ac,seconds){
+  const length=Math.max(1,Math.ceil(ac.sampleRate*seconds));
+  const buffer=ac.createBuffer(1,length,ac.sampleRate);
+  const data=buffer.getChannelData(0);
+  let last=0;
+  for(let i=0;i<length;i++){
+    const white=Math.random()*2-1;
+    last=last*.86+white*.14;
+    data[i]=last;
+  }
+  return buffer;
+}
+
+function startArmedFlightAudio(){
+  if(!flightAudioState || !flightAudioState.armed || flightAudioState.started) return;
+  const state=flightAudioState;
+  state.armed=false;
+  state.started=true;
+  const ac=getFlightAudioContext();
+  if(!ac || ac.state!=="running"){
+    state.useAudioClock=false;
+    state.startTime=performance.now()/1000;
+    return;
+  }
+
+  const t0=ac.currentTime+0.035;
+  const total=FLIGHT_AUDIO_DURATION_SEC;
+  state.startTime=t0;
+  state.durationSec=total;
+  state.useAudioClock=true;
+  const nodes=[];
+  const keep=n=>{nodes.push(n);return n;};
+
+  // 起飛至巡航：主引擎逐步拉高轉速。
+  const engine=keep(ac.createOscillator());
+  const engineGain=keep(ac.createGain());
+  engine.type="sawtooth";
+  engine.frequency.setValueAtTime(72,t0);
+  engine.frequency.exponentialRampToValueAtTime(210,t0+2.4);
+  engine.frequency.exponentialRampToValueAtTime(245,t0+4.5);
+  engine.frequency.exponentialRampToValueAtTime(92,t0+total-.35);
+  engineGain.gain.setValueAtTime(0.0001,t0);
+  engineGain.gain.exponentialRampToValueAtTime(0.055,t0+.45);
+  engineGain.gain.linearRampToValueAtTime(0.07,t0+2.6);
+  engineGain.gain.linearRampToValueAtTime(0.046,t0+5.3);
+  engineGain.gain.exponentialRampToValueAtTime(0.0001,t0+total);
+  engine.connect(engineGain).connect(ac.destination);
+  engine.start(t0); engine.stop(t0+total+.05);
+
+  // 氣流：起飛加速較強，巡航降低，進場再次增強後收掉。
+  const noise=keep(ac.createBufferSource());
+  const noiseFilter=keep(ac.createBiquadFilter());
+  const noiseGain=keep(ac.createGain());
+  noise.buffer=makeFlightNoiseBuffer(ac,total+.1);
+  noiseFilter.type="bandpass";
+  noiseFilter.frequency.setValueAtTime(520,t0);
+  noiseFilter.frequency.linearRampToValueAtTime(1450,t0+2.6);
+  noiseFilter.frequency.linearRampToValueAtTime(820,t0+5.0);
+  noiseFilter.frequency.linearRampToValueAtTime(420,t0+total);
+  noiseFilter.Q.value=.7;
+  noiseGain.gain.setValueAtTime(0.0001,t0);
+  noiseGain.gain.exponentialRampToValueAtTime(0.09,t0+.35);
+  noiseGain.gain.linearRampToValueAtTime(0.045,t0+3.2);
+  noiseGain.gain.linearRampToValueAtTime(0.075,t0+6.7);
+  noiseGain.gain.exponentialRampToValueAtTime(0.0001,t0+total);
+  noise.connect(noiseFilter).connect(noiseGain).connect(ac.destination);
+  noise.start(t0); noise.stop(t0+total+.05);
+
+  // 進場提示音。
+  const chime=keep(ac.createOscillator());
+  const chimeGain=keep(ac.createGain());
+  chime.type="sine";
+  chime.frequency.setValueAtTime(660,t0+5.55);
+  chime.frequency.setValueAtTime(880,t0+5.72);
+  chimeGain.gain.setValueAtTime(0.0001,t0+5.5);
+  chimeGain.gain.linearRampToValueAtTime(0.035,t0+5.57);
+  chimeGain.gain.exponentialRampToValueAtTime(0.0001,t0+5.95);
+  chime.connect(chimeGain).connect(ac.destination);
+  chime.start(t0+5.5); chime.stop(t0+6.0);
+
+  // 接地低頻震動，讓降落與弧線終點同步。
+  const touchdown=keep(ac.createOscillator());
+  const touchdownGain=keep(ac.createGain());
+  touchdown.type="sine";
+  touchdown.frequency.setValueAtTime(92,t0+7.25);
+  touchdown.frequency.exponentialRampToValueAtTime(38,t0+7.92);
+  touchdownGain.gain.setValueAtTime(0.0001,t0+7.20);
+  touchdownGain.gain.exponentialRampToValueAtTime(0.13,t0+7.29);
+  touchdownGain.gain.exponentialRampToValueAtTime(0.0001,t0+8.05);
+  touchdown.connect(touchdownGain).connect(ac.destination);
+  touchdown.start(t0+7.20); touchdown.stop(t0+8.08);
+
+  state.nodes=nodes;
+}
+
+function flightAudioProgress(){
+  const state=flightAudioState;
+  if(!state || !state.started) return null;
+  const duration=Math.max(.1,Number(state.durationSec)||FLIGHT_AUDIO_DURATION_SEC);
+  const now=state.useAudioClock && flightAudioContext ? flightAudioContext.currentTime : performance.now()/1000;
+  return Math.max(0,Math.min(1,(now-state.startTime)/duration));
+}
+
+function pauseFlightAudio(paused){
+  if(!flightAudioState || !flightAudioState.started || !flightAudioState.useAudioClock || !flightAudioContext) return;
+  try{
+    if(paused && flightAudioContext.state==="running") flightAudioContext.suspend().catch(()=>{});
+    else if(!paused && flightAudioContext.state==="suspended") flightAudioContext.resume().catch(()=>{});
+  }catch(_e){}
 }
 
 function beginFlightPresentation(item){
   animationFlightMode=true;
-  if(!animationSpeedManuallyChanged){
-    animationFlightRestoreSpeed=getAnimationSpeed();
-    setAnimationSpeedValue(2,true);
-  }
+  // 飛航期間完全忽略速度倍率；不改速度滑桿，落地後自然回到原本節奏。
+  animationFlightRestoreSpeed=getAnimationSpeed();
   setFlightWorldView(item.fromCoord,item.coord);
   renderMap();
 }
@@ -3552,9 +3777,10 @@ function setLandingViewImmediate(index,dest){
 
 function endFlightPresentation(){
   animationFlightMode=false;
+  stopFlightAudio();
   const landingDest=animationLastCoord ? [animationLastCoord[0],animationLastCoord[1]] : null;
   setLandingViewImmediate(animationFlightLandingIndex,landingDest);
-  if(!animationSpeedManuallyChanged && animationFlightRestoreSpeed!=null){
+  if(animationFlightRestoreSpeed!=null && getAnimationSpeed()!==animationFlightRestoreSpeed){
     setAnimationSpeedValue(animationFlightRestoreSpeed,true);
   }
   animationFlightRestoreSpeed=null;
@@ -3615,6 +3841,7 @@ function consumeFlightItem(item,itemIndex){
   const arc=makeFlightArc(from,to);
   const km=polylineKm(arc);
   const speed=getAnimationSpeed();
+  armFlightAudio();
 
   animationTweenFrom=from;
   animationTweenTo=to;
@@ -3624,14 +3851,15 @@ function consumeFlightItem(item,itemIndex){
   animationTweenKmStart=animationRouteKm;
   animationTweenKmEnd=animationRouteKm+km;
   animationWaterTrail=[];
-  animationTweenDuration=flightTweenDuration(km,speed);
+  // 飛行線固定跟隨「起飛 + 飛行 + 降落」音效實際時間，不受 1×~100× 倍速影響。
+  animationTweenDuration=Math.round(FLIGHT_AUDIO_DURATION_SEC*1000);
   animationTweenIsFlight=true;
   animationPendingCrossDayBridge={from,to,item,flight:true};
 
   animationLastCoord=to;
   animationLastItem=item;
   syncAnimationDate(item);
-  animationNow.textContent=`✈ 飛航中｜${Math.round(km).toLocaleString("zh-TW")} km｜全球視角 ${speed}×`;
+  animationNow.textContent=`✈ 飛航中｜${Math.round(km).toLocaleString("zh-TW")} km｜音效同步 ${FLIGHT_AUDIO_DURATION_SEC.toFixed(1)} 秒｜${speed}× 暫停套用`;
 }
 
 function polylineKm(path){
@@ -3902,7 +4130,21 @@ function animationStep(ts){
   // 10×以下與跨日缺口都用逐幀插值，避免舊 start/end 資料一段一段停頓或跨日瞬移。
   if(animationTweenFrom && animationTweenTo && animationTweenProgress<1){
     const moveDuration=Math.max(100,animationTweenDuration||180);
-    animationTweenProgress=Math.min(1,animationTweenProgress+dt/moveDuration);
+    if(animationTweenIsFlight){
+      // 跨國底圖／Zoom 完成後才啟動音效，飛行線再以音效時鐘精準同步。
+      if(flightAudioState && !flightAudioState.started){
+        startArmedFlightAudio();
+        animationLastTS=ts;
+        drawOverlay();
+        animationRAF=requestAnimationFrame(animationStep);
+        return;
+      }
+      const audioProgress=flightAudioProgress();
+      if(audioProgress!=null) animationTweenProgress=audioProgress;
+      else animationTweenProgress=Math.min(1,animationTweenProgress+dt/moveDuration);
+    }else{
+      animationTweenProgress=Math.min(1,animationTweenProgress+dt/moveDuration);
+    }
     const t=animationTweenProgress;
     // 接近線性的 smoothstep，保留一點柔順但減少每小段「停一下再起步」。
     const eased=t*t*(3-2*t);
@@ -4016,6 +4258,8 @@ function animationStep(ts){
 }
 
 function startHistoryAnimation(){
+  // 使用者點播放時先解鎖 Web Audio，真正起飛時才開始發聲。
+  primeFlightAudio();
   worldFinalMode=false;
   const scope=animationScope.value;
   if(scope==="all" && cachedAllAnimationItems.length){
@@ -4062,6 +4306,7 @@ pauseHistoryBtn.onclick=()=>{
   if(!animationRunning) return;
   animationPaused=!animationPaused;
   pauseHistoryBtn.textContent=animationPaused?"▶ 繼續":"⏸ 暫停";
+  pauseFlightAudio(animationPaused);
   if(!animationPaused){
     animationLastTS=0;
     animationRAF=requestAnimationFrame(animationStep);
@@ -4074,6 +4319,7 @@ animationProgress.addEventListener("input",()=>{
   const target=Math.max(0,Math.min(animationItems.length-1,Math.round((Number(animationProgress.value)/1000)*(animationItems.length-1))));
   const wasRunning=animationRunning;
   animationRunning=false;
+  stopFlightAudio();
   if(animationRAF) cancelAnimationFrame(animationRAF);
   animationDrawnLines=[]; animationDrawnPoints=[]; animationCurrentLine=null; animationLastCoord=null; animationLastDate=null; animationBounds=null; animationHasForeign=false; animationRegionMode=null; animationRegionBounds=null; animationRegionLastCoord=null; animationCameraTrail=[]; cameraLastRealUpdate=0; cameraLastZoomChange=0; cameraCurrentBand=null; taiwanCameraMode=null; taiwanForcedWideUntilTime=0; animationCurrentRouteKey=null; animationSyntheticLines=[]; animationDisplayCoord=null; animationTweenFrom=null; animationTweenTo=null; animationTweenProgress=1; animationWaterTrail=[]; animationRouteKm=0; animationDisplayKm=0; animationTweenKmStart=0; animationTweenKmEnd=0; animationPendingCrossDayBridge=null; animationTweenPath=null; animationLastItem=null; animationTweenDuration=180; updateKmCounter(0);
   animationIndex=0;
