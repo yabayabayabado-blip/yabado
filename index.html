@@ -340,8 +340,10 @@ body.capture-clean #photoLayer,body.capture-clean #photoViewer{display:none!impo
 .animbar button.primary{font-weight:800;border-color:#8ab4f8;background:#f5f9ff;color:#174ea6}
 .animbar button:disabled{opacity:.45;cursor:not-allowed}
 .animbar label{font-size:12px;color:var(--muted);display:flex;gap:5px;align-items:center}
-.speed-slider-label{min-width:0;flex:0 1 auto}
-.speed-slider-label input[type=range]{width:135px;accent-color:var(--accent)}
+#tripSelectLabel{flex:0 0 auto;min-width:0;white-space:nowrap}
+#tripSelect{width:190px;max-width:190px;min-width:0}
+.speed-slider-label{min-width:210px;flex:1 1 250px;white-space:nowrap}
+.speed-slider-label input[type=range]{width:135px;max-width:100%;accent-color:var(--accent)}
 .km-counter{display:flex;align-items:baseline;gap:6px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;white-space:nowrap}
 .km-counter .km-label{font-size:12px;color:var(--muted)}
 .km-counter .km-value{font-size:18px;font-weight:900;font-variant-numeric:tabular-nums;color:#b3261e;min-width:60px;text-align:right}
@@ -736,6 +738,8 @@ let tileBatchId = 0;
 let tileExpected = 0;
 let tileSettled = 0;
 let tileBad = 0;
+let tileLoadStartedAt = 0;
+let tileReadyAt = 0;
 
 // ---------- History animation ----------
 let animationItems = [];
@@ -1039,6 +1043,198 @@ function parseTimeline(data){
     f=f.concat(parseRawSignals(data));
   }
   return {features:f,formats};
+}
+
+// ---------- iOS bare-array compatibility layer ----------
+// Important: the existing Android / legacy parsers above are intentionally left unchanged.
+// This layer runs only when the JSON root itself is an Array, as seen in some iPhone/iPad Timeline exports.
+function firstDefined(...values){
+  for(const v of values){
+    if(v !== undefined && v !== null && v !== "") return v;
+  }
+  return null;
+}
+
+function iosNormalizeTimeValue(value){
+  if(value == null || value === "") return value;
+  if(typeof value === "object"){
+    return firstDefined(
+      value.timestamp, value.time, value.startTime, value.endTime,
+      value.startTimestamp, value.endTimestamp,
+      value.startTimestampMs, value.endTimestampMs
+    );
+  }
+  return value;
+}
+
+function iosNormalizeLocation(value){
+  if(value == null) return value;
+  // parseSemanticSegments() already accepts strings, E7 objects, latitude/longitude, lat/lng and nested latLng.
+  // Preserve those forms. Only unwrap common iOS wrapper names when present.
+  if(typeof value === "object" && !Array.isArray(value)){
+    return firstDefined(
+      value.latLng, value.LatLng, value.location, value.placeLocation,
+      value.coordinate, value.coordinates, value
+    );
+  }
+  return value;
+}
+
+function normalizeIosBareSegment(seg){
+  if(!seg || typeof seg !== "object" || Array.isArray(seg)) return seg;
+  const out={...seg};
+
+  // Time field tolerance. Keep canonical startTime/endTime for the existing semantic parser.
+  out.startTime=firstDefined(
+    seg.startTime, seg.startTimestamp, seg.startTimestampMs,
+    iosNormalizeTimeValue(seg.start)
+  ) || "";
+  out.endTime=firstDefined(
+    seg.endTime, seg.endTimestamp, seg.endTimestampMs,
+    iosNormalizeTimeValue(seg.end)
+  ) || "";
+
+  // Visit tolerance: normalize common iOS variants into visit.topCandidate.placeLocation.
+  const rawVisit=firstDefined(seg.visit, seg.placeVisit, seg.place);
+  if(rawVisit && typeof rawVisit === "object" && !Array.isArray(rawVisit)){
+    const visit={...rawVisit};
+    const rawCandidate=firstDefined(visit.topCandidate, visit.candidate, visit.place) || {};
+    const cand=(rawCandidate && typeof rawCandidate === "object" && !Array.isArray(rawCandidate))
+      ? {...rawCandidate}
+      : {};
+    const loc=firstDefined(
+      cand.placeLocation, cand.location, cand.latLng, cand.LatLng,
+      visit.placeLocation, visit.location, visit.latLng, visit.LatLng
+    );
+    if(loc != null) cand.placeLocation=iosNormalizeLocation(loc);
+    cand.placeName=firstDefined(cand.placeName,cand.name,visit.placeName,visit.name) || cand.placeName;
+    cand.placeId=firstDefined(cand.placeId,visit.placeId) || cand.placeId;
+    visit.topCandidate=cand;
+    out.visit=visit;
+  }
+
+  // Activity tolerance: normalize startLocation/endLocation and alternative activity labels.
+  const rawActivity=firstDefined(seg.activity, seg.activitySegment, seg.movement);
+  if(rawActivity && typeof rawActivity === "object" && !Array.isArray(rawActivity)){
+    const act={...rawActivity};
+    const startLoc=firstDefined(act.start,act.startLocation,act.origin,act.from);
+    const endLoc=firstDefined(act.end,act.endLocation,act.destination,act.to);
+    if(startLoc != null) act.start=iosNormalizeLocation(startLoc);
+    if(endLoc != null) act.end=iosNormalizeLocation(endLoc);
+    if(!act.topCandidate || typeof act.topCandidate !== "object") act.topCandidate={};
+    const activityType=firstDefined(
+      act.topCandidate.type, act.activityType, act.type, act.transportMode, act.mode
+    );
+    if(activityType != null) act.topCandidate.type=activityType;
+    out.activity=act;
+  }
+
+  // Timeline path tolerance: normalize point/location/coordinate plus time/offset aliases.
+  const rawPath=firstDefined(seg.timelinePath,seg.path,seg.timelinePoints,seg.points);
+  if(Array.isArray(rawPath)){
+    out.timelinePath=rawPath.map(p=>{
+      if(p == null) return p;
+      if(typeof p !== "object" || Array.isArray(p)) return {point:p};
+      const q={...p};
+      const loc=firstDefined(p.point,p.location,p.latLng,p.LatLng,p.coordinate,p.coordinates);
+      if(loc != null) q.point=iosNormalizeLocation(loc);
+      q.time=firstDefined(p.time,p.timestamp,p.recordedTime,p.datetime) || q.time || "";
+      const offset=firstDefined(
+        p.durationMinutesOffsetFromStartTime,
+        p.minutesOffsetFromStartTime,
+        p.offsetMinutes,
+        p.minuteOffset
+      );
+      if(offset != null) q.durationMinutesOffsetFromStartTime=offset;
+      return q;
+    }).filter(Boolean);
+  }
+
+  return out;
+}
+
+function looksLikeIosBareTimelineArray(data){
+  if(!Array.isArray(data) || !data.length) return false;
+  const sample=data.slice(0,Math.min(60,data.length));
+  let score=0;
+  for(const seg of sample){
+    if(!seg || typeof seg !== "object" || Array.isArray(seg)) continue;
+    if(seg.startTime || seg.endTime || seg.startTimestamp || seg.endTimestamp) score++;
+    if(seg.visit || seg.placeVisit || seg.activity || seg.activitySegment) score+=2;
+    if(Array.isArray(seg.timelinePath) || Array.isArray(seg.path) || Array.isArray(seg.timelinePoints)) score+=2;
+  }
+  return score>=2;
+}
+
+function normalizeIosBareArray(data){
+  return {
+    semanticSegments:data.map(normalizeIosBareSegment),
+    __timelineSourceFormat:"iOS bare-array"
+  };
+}
+
+function timelineInputDiagnostics(rawData, normalizedData, parsed, iosBare){
+  const diag={
+    rootType:Array.isArray(rawData)?"Array":(rawData===null?"null":typeof rawData),
+    source:iosBare?"iPhone / iPad bare-array":"Android / 舊版既有格式",
+    keys:[],
+    segments:0, visits:0, activities:0, paths:0, rawSignals:0
+  };
+  if(rawData && typeof rawData === "object" && !Array.isArray(rawData)){
+    diag.keys=Object.keys(rawData).slice(0,16);
+  }else if(Array.isArray(rawData)){
+    const first=rawData.find(x=>x && typeof x === "object" && !Array.isArray(x));
+    if(first) diag.keys=Object.keys(first).slice(0,16);
+  }
+  const segs=Array.isArray(normalizedData?.semanticSegments)?normalizedData.semanticSegments:[];
+  diag.segments=segs.length;
+  for(const seg of segs){
+    if(seg?.visit) diag.visits++;
+    if(seg?.activity) diag.activities++;
+    if(Array.isArray(seg?.timelinePath) && seg.timelinePath.length) diag.paths++;
+  }
+  diag.rawSignals=Array.isArray(normalizedData?.rawSignals)?normalizedData.rawSignals.length:0;
+  diag.features=parsed?.features?.length||0;
+  return diag;
+}
+
+function parseTimelineCompatible(rawData){
+  // Android / legacy path: call the original parser with the original object, unchanged.
+  if(!Array.isArray(rawData)){
+    const parsed=parseTimeline(rawData);
+    return {
+      ...parsed,
+      sourceFormat:"既有 Android / Google Timeline 格式",
+      diagnostics:timelineInputDiagnostics(rawData,rawData,parsed,false)
+    };
+  }
+
+  // iOS path: only bare arrays are normalized. Never modifies the Android object path.
+  if(looksLikeIosBareTimelineArray(rawData)){
+    const normalized=normalizeIosBareArray(rawData);
+    const parsed=parseTimeline(normalized);
+    return {
+      ...parsed,
+      sourceFormat:"iPhone / iPad bare-array",
+      diagnostics:timelineInputDiagnostics(rawData,normalized,parsed,true)
+    };
+  }
+
+  return {
+    features:[], formats:[], sourceFormat:"未知 Array 格式",
+    diagnostics:timelineInputDiagnostics(rawData,{},null,false)
+  };
+}
+
+function timelineDiagnosticHtml(parsed){
+  const d=parsed?.diagnostics||{};
+  const keyText=(d.keys||[]).length ? (d.keys||[]).map(escapeHtml).join(", ") : "—";
+  if(parsed?.sourceFormat==="iPhone / iPad bare-array"){
+    return `偵測：<b>iPhone / iPad</b>（bare-array）<br>`+
+      `Segments：${Number(d.segments||0).toLocaleString()}｜停留：${Number(d.visits||0).toLocaleString()}｜活動：${Number(d.activities||0).toLocaleString()}｜路徑：${Number(d.paths||0).toLocaleString()}｜Raw：${Number(d.rawSignals||0).toLocaleString()}`;
+  }
+  return `偵測：<b>${escapeHtml(parsed?.sourceFormat||"未知")}</b><br>`+
+    `JSON 根節點：${escapeHtml(d.rootType||"未知")}｜欄位：${keyText}`;
 }
 
 // ---------- Foreign-day detection ----------
@@ -1744,7 +1940,18 @@ function refreshTripSelector(){
   detectedTrips.forEach((t,i)=>{
     const opt=document.createElement("option");
     opt.value=String(i);
-    opt.textContent=`${t.start} ～ ${t.end}（出國 ${t.days} 日）`;
+    const shortTripDate=(start,end)=>{
+      const s=String(start||""), e=String(end||"");
+      if(/^\d{4}-\d{2}-\d{2}$/.test(s) && /^\d{4}-\d{2}-\d{2}$/.test(e)){
+        const sameYear=s.slice(0,4)===e.slice(0,4);
+        return sameYear
+          ? `${s.replaceAll("-","/")}–${e.slice(5).replaceAll("-","/")}`
+          : `${s.replaceAll("-","/")}–${e.replaceAll("-","/")}`;
+      }
+      return `${s}–${e}`;
+    };
+    opt.textContent=`${shortTripDate(t.start,t.end)}（${t.days}日）`;
+    opt.title=`${t.start} ～ ${t.end}（出國 ${t.days} 日）`;
     tripSelect.appendChild(opt);
   });
   if(!detectedTrips.length){
@@ -1804,6 +2011,8 @@ function renderTiles(){
   const thisBatch=++tileBatchId;
   tilesEl.innerHTML="";
   tileOK=0;tileBad=0;tileExpected=0;tileSettled=0;
+  tileLoadStartedAt=performance.now();
+  tileReadyAt=0;
   const providersUsed=new Set();
   const baseMode=currentBaseMapMode();
   const w=mapWrap.clientWidth,h=mapWrap.clientHeight;
@@ -1833,9 +2042,11 @@ function renderTiles(){
       img.dataset.provider=src.provider;
       img.dataset.layer=src.layer;
 
+      img.dataset.retryCount="0";
       img.onload=()=>{
         if(thisBatch!==tileBatchId) return;
         tileOK++; tileSettled++;
+        if(tileSettled>=tileExpected) tileReadyAt=performance.now();
         if(tileOK>1){
           if(baseMode==="TAIWAN"){
             const layerName=zoom<=15?"EMAP6_OPENDATA":"EMAP6";
@@ -1848,7 +2059,20 @@ function renderTiles(){
 
       img.onerror=()=>{
         if(thisBatch!==tileBatchId) return;
+        const retry=Number(img.dataset.retryCount||0);
+        if(retry<2){
+          img.dataset.retryCount=String(retry+1);
+          mapStatus.textContent=`底圖載入中，失敗圖磚重試 ${retry+1}/2…`;
+          setTimeout(()=>{
+            if(thisBatch!==tileBatchId) return;
+            const original=src.url;
+            const sep=original.includes("?")?"&":"?";
+            img.src=original+sep+"timeline_retry="+(retry+1)+"_"+Date.now();
+          }, retry===0?220:650);
+          return;
+        }
         tileBad++; tileSettled++;
+        if(tileSettled>=tileExpected) tileReadyAt=performance.now();
         img.remove();
         if(tileOK===0 && tileBad>2){
           mapStatus.textContent=`Zoom ${zoom} 背景圖資載入失敗／請檢查網路`;
@@ -2158,26 +2382,46 @@ function drawOverlay(){
 let lastTileViewSignature="";
 let lastRenderedTileZoom=null;
 let lastRenderedBaseMode="";
-function beginCameraTileHold(maxMs=1500){
+let lastRenderedTileCenter=null;
+let animationOverlayWaitingForTiles=false;
+let animationCameraHoldReason="";
+function beginCameraTileHold(maxMs=12000,reason="底圖切換"){
   if(!animationRunning) return;
+  // 舊版只等約 1.6 秒，慢 PC / 慢網路很容易底圖尚未完成就放行。
+  // 新版至少提供 8 秒安全窗，預設 12 秒；正常機器圖磚完成後會立即放行，不會白等。
   animationCameraHoldBatch=tileBatchId;
-  animationCameraHoldUntil=performance.now()+Math.max(250,maxMs);
+  animationCameraHoldUntil=performance.now()+Math.max(8000,maxMs);
+  animationCameraHoldReason=reason;
+  animationOverlayWaitingForTiles=true;
 }
 function cameraTileHoldActive(){
   if(!animationCameraHoldUntil) return false;
   const now=performance.now();
-  if(now>=animationCameraHoldUntil){
-    animationCameraHoldUntil=0;
-    animationCameraHoldBatch=0;
-    return false;
-  }
   if(animationCameraHoldBatch!==tileBatchId) return true;
-  const ratio=tileExpected>0 ? tileSettled/tileExpected : 1;
-  if(ratio>=0.72 || (tileExpected<=6 && tileSettled>=Math.max(1,tileExpected-1))){
+
+  const expected=Math.max(0,tileExpected);
+  const allSettled=expected===0 || tileSettled>=expected;
+  const successRatio=expected>0 ? tileOK/expected : 1;
+  // 必須等這一批圖磚全部完成（含重試）才繼續動畫；成功率太低時繼續等到安全上限。
+  if(allSettled && (successRatio>=0.88 || expected<=2)){
     animationCameraHoldUntil=0;
     animationCameraHoldBatch=0;
+    animationCameraHoldReason="";
+    animationOverlayWaitingForTiles=false;
     return false;
   }
+
+  if(now>=animationCameraHoldUntil){
+    // 避免個別圖磚服務永久無回應造成動畫完全卡死。逾時才降級放行。
+    animationCameraHoldUntil=0;
+    animationCameraHoldBatch=0;
+    animationCameraHoldReason="";
+    animationOverlayWaitingForTiles=false;
+    return false;
+  }
+
+  const pct=expected?Math.round((tileSettled/expected)*100):100;
+  mapStatus.textContent=`${animationCameraHoldReason||"底圖切換"}｜底圖載入 ${pct}%（${tileOK}/${expected} 成功）｜載入完成後繼續畫線`;
   return true;
 }
 function renderMap(forceTiles=false){
@@ -2191,15 +2435,25 @@ function renderMap(forceTiles=false){
   ].join("|");
   if(forceTiles || sig!==lastTileViewSignature){
     const nextMode=currentBaseMapMode();
-    const layerJump=(lastRenderedTileZoom!==null && lastRenderedTileZoom!==zoom) ||
-      (lastRenderedBaseMode && lastRenderedBaseMode!==nextMode);
+    const zoomJump=(lastRenderedTileZoom!==null && lastRenderedTileZoom!==zoom);
+    const baseJump=Boolean(lastRenderedBaseMode && lastRenderedBaseMode!==nextMode);
+    const centerJump=lastRenderedTileCenter
+      ? haversineKm([lastRenderedTileCenter.lng,lastRenderedTileCenter.lat],[center.lng,center.lat])
+      : 0;
+    // 一般小幅平移不鎖動畫；底圖來源、Zoom、強制重載或跨區大跳躍才先等底圖。
+    const cameraJump=zoomJump || baseJump || forceTiles || centerJump>=120;
     lastTileViewSignature=sig;
     renderTiles();
-    if(layerJump) beginCameraTileHold(1600);
+    if(cameraJump && animationRunning){
+      const reason=baseJump?"切換臺灣／國外底圖":zoomJump?`縮放至 Zoom ${zoom}`:centerJump>=120?"跨區移動底圖":"更新底圖";
+      beginCameraTileHold(12000,reason);
+    }
     lastRenderedTileZoom=zoom;
     lastRenderedBaseMode=nextMode;
+    lastRenderedTileCenter={lat:center.lat,lng:center.lng};
   }
-  drawOverlay();
+  // 鏡頭切換期間先只載底圖，不把新位置／新路線搶先畫在尚未完成的圖層上。
+  if(!(animationRunning && animationOverlayWaitingForTiles)) drawOverlay();
 }
 
 function updateAnimationBounds(coord){
@@ -3270,7 +3524,7 @@ function maybeAdvanceLandingCameraPhase(){
   animationLandingPhase=null;
   setDestinationLocalView(p.index,p.dest);
   renderMap(true);
-  beginCameraTileHold(1600);
+  beginCameraTileHold(12000,"落地當地縮放");
 }
 
 function setLandingViewImmediate(index,dest){
@@ -3281,7 +3535,7 @@ function setLandingViewImmediate(index,dest){
   // 落地第一階段：一定先看目的國全國尺度；飛回臺灣則直接完整臺灣。
   setDestinationCountryOverview(d);
   renderMap(true);
-  beginCameraTileHold(1900);
+  beginCameraTileHold(12000,"落地國家總覽");
 
   if(isTaiwanCoordinate(d[1],d[0])){
     animationLandingPhase=null;
@@ -3631,10 +3885,14 @@ function animationStep(ts){
     return;
   }
   if(cameraTileHoldActive()){
-    drawOverlay();
+    // 只等待底圖，不推進 tween、不累加倍速時間，也不提前畫新線。
     animationLastTS=ts;
     animationRAF=requestAnimationFrame(animationStep);
     return;
+  }
+  if(animationOverlayWaitingForTiles===false){
+    // 剛解除圖磚鎖時先把目前已到位的路線狀態畫上去，再進入下一段動畫。
+    drawOverlay();
   }
   if(!animationLastTS) animationLastTS=ts;
   const dt=Math.min(100,ts-animationLastTS);
@@ -3701,10 +3959,19 @@ function animationStep(ts){
 
   while(animationAccumulator>=interval && animationIndex<animationItems.length && processedThisFrame<maxItemsThisFrame){
     animationAccumulator-=interval;
+    const beforeCameraSig=[currentBaseMapMode(),zoom,Number(center.lat).toFixed(4),Number(center.lng).toFixed(4)].join("|");
     consumeAnimationItem(animationItems[animationIndex],animationIndex);
     animationIndex++;
     processedThisFrame++;
     changed=true;
+    const afterCameraSig=[currentBaseMapMode(),zoom,Number(center.lat).toFixed(4),Number(center.lng).toFixed(4)].join("|");
+
+    // 高倍速時原本單幀可連吃 36~220 筆；一旦這一筆造成底圖/Zoom/大範圍鏡頭改變，
+    // 立刻停止本幀批次、啟動圖磚載入，避免後面幾十筆線先跑完才看到新地圖。
+    if(afterCameraSig!==beforeCameraSig){
+      renderMap();
+      break;
+    }
     if(animationTweenFrom && animationTweenProgress<1) break;
     if(getAnimationSpeed()<=2) break;
   }
@@ -4179,10 +4446,13 @@ fileInput.addEventListener("change",async e=>{
   try{
     const text=await file.text();
     const data=JSON.parse(text);
-    const parsed=parseTimeline(data);
+    const parsed=parseTimelineCompatible(data);
 
     if(!parsed.features.length){
-      throw new Error("沒有解析到 semanticSegments、timelineObjects 或 rawSignals 的定位資料。");
+      const d=parsed.diagnostics||{};
+      const root=d.rootType||"未知";
+      const keys=(d.keys||[]).join(", ")||"無";
+      throw new Error(`沒有解析到可用定位資料。偵測格式：${parsed.sourceFormat||"未知"}；JSON 根節點：${root}；偵測欄位：${keys}`);
     }
 
     resetAnimationDrawing(true);
@@ -4212,7 +4482,8 @@ fileInput.addEventListener("change",async e=>{
 
     fileInfo.innerHTML=
       `<b>${escapeHtml(file.name)}</b><br>`+
-      `格式：${parsed.formats.join(", ")}<br>`+
+      `${timelineDiagnosticHtml(parsed)}<br>`+
+      `解析格式：${parsed.formats.map(escapeHtml).join(", ")}<br>`+
       `資料日期：${first} ～ ${last}（${dataDates.length.toLocaleString()} 天）<br>`+
       `特徵數：${allFeatures.length.toLocaleString()}`;
 
