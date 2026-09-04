@@ -458,7 +458,7 @@ body.capture-clean .mapStatus{bottom:28px}
 <div class="app">
   <aside id="sidebar" class="sidebar">
     <h1 class="title">Google 時間軸網頁版</h1>
-    <div class="sub">直接選擇手機匯出的「時間軸.json」。播放歷史動畫後會停在世界總覽，可從同一頁產生動畫 WebM 與最終世界路線 PNG。</div>
+    <div class="sub">直接選擇手機匯出的「時間軸.json」。播放歷史動畫後會停在世界總覽；播放途中暫停或播放完成後，可任選下載 WebM 動畫、MP4 動畫或 PNG 路線圖。</div>
 
     <div id="fileBox" class="filebox">
       <input id="fileInput" type="file" accept=".json,application/json">
@@ -556,8 +556,10 @@ body.capture-clean .mapStatus{bottom:28px}
         <span id="animationNow" class="anim-now">尚未播放</span>
       </div>
       <div class="export-actions">
-        <button id="exportBothBtn" disabled>產生動畫檔＋世界圖片</button>
-        <span id="exportStatus" class="export-note">動畫播放完成後即可匯出 WebM＋PNG</span>
+        <button id="downloadWebmBtn" disabled>下載 WebM 動畫</button>
+        <button id="downloadMp4Btn" disabled>下載 MP4 動畫</button>
+        <button id="downloadPngBtn" disabled>下載 PNG 路線圖</button>
+        <span id="exportStatus" class="export-note">播放時同步錄製；暫停或播放完成後，可三種格式任選下載</span>
       </div>
     </div>
     <div class="toolbar">
@@ -640,6 +642,7 @@ function featureCoordinatesAreTaiwan(features){
 }
 
 function currentBaseMapMode(){
+  if(exportCaptureMode) return "GLOBAL";
   if(worldFinalMode) return "GLOBAL";
   if(animationFlightMode) return "GLOBAL";
   const animationVisible = animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length;
@@ -707,7 +710,9 @@ const animationFollow = $("animationFollow");
 const animationProgress = $("animationProgress");
 const animationStartLabel = $("animationStartLabel");
 const animationNow = $("animationNow");
-const exportBothBtn = $("exportBothBtn");
+const downloadWebmBtn = $("downloadWebmBtn");
+const downloadMp4Btn = $("downloadMp4Btn");
+const downloadPngBtn = $("downloadPngBtn");
 const exportStatus = $("exportStatus");
 
 let allFeatures = [];
@@ -800,10 +805,34 @@ let worldFinalMode = false;
 let animationCompletedOnce = false;
 let animationCompleteResolver = null;
 let exportInProgress = false;
+// 播放當下同步錄製：完成後可直接下載，不必為匯出再重播一次。
+let liveExportCanvas = null;
+let liveRecorder = null;
+let liveStream = null;
+let liveChunks = [];
+let liveCaptureRAF = 0;
+let liveRecordingBlob = null;
+let liveRecordingMime = "";
+let liveMp4Recorder = null;
+let liveMp4Chunks = [];
+let liveMp4Blob = null;
+let liveMp4Mime = "";
+let liveRecordingStarted = false;
+let liveRecordingFinalizing = null;
+let liveRecordingSerial = 0;
+let exportCaptureMode = false; // 匯出時固定使用 CORS 友善的全球 OSM，直接合成真正 WebM/PNG
 const FINAL_WORLD_ROUTE_COLOR = "#d93025";
 let taiwanDayPlans = new Map();
 let cachedAllAnimationItems = [];
 let cachedInitialPreflight = null;
+
+// ---------- Background map prewarm ----------
+// JSON 一載入就背景預抓「離開臺灣後最可能用到」的 OSM 圖磚。
+// 真正播放跨國段時，瀏覽器通常可直接從 HTTP cache 取圖，避免鏡頭跳到國外才現場等圖。
+const tilePrewarmSeen=new Set();
+let tilePrewarmSerial=0;
+let tilePrewarmActive=0;
+const TILE_PREWARM_MAX=260;
 let taiwanForcedWideUntilTime = 0; // 開場預判為長距離時，鎖定全臺視角直到預判窗結束，避免被前段小移動立刻拉回 Zoom 10
 let taiwanCameraMode = null; // "SMALL" / "WIDE"，臺灣只允許這兩種鏡頭，切換時直接跳到目標，不經中間 Zoom
 const INITIAL_LOOKAHEAD_MS = 24*60*60*1000; // 從動畫第一筆往後預看 24 小時，不受午夜切日影響
@@ -1981,6 +2010,76 @@ function y2lat(y,z){
   const n=Math.PI-2*Math.PI*y/(Math.pow(2,z)*TILE);
   return 180/Math.PI*Math.atan(.5*(Math.exp(n)-Math.exp(-n)));
 }
+
+function prewarmTileUrlsAround(coord,z,mode="GLOBAL",radius=null){
+  if(!coord || coord.length<2 || tilePrewarmSeen.size>=TILE_PREWARM_MAX) return [];
+  const lng=Number(coord[0]),lat=Number(coord[1]);
+  if(!Number.isFinite(lng)||!Number.isFinite(lat)) return [];
+  const n=Math.pow(2,z);
+  const cx=Math.floor(lon2x(lng,z)/TILE);
+  const cy=Math.floor(lat2y(lat,z)/TILE);
+  const rx=radius==null?Math.max(2,Math.ceil((mapWrap.clientWidth||900)/(2*TILE))+1):radius;
+  const ry=radius==null?Math.max(2,Math.ceil((mapWrap.clientHeight||600)/(2*TILE))+1):radius;
+  const urls=[];
+  for(let x=cx-rx;x<=cx+rx;x++){
+    for(let y=cy-ry;y<=cy+ry;y++){
+      if(x<0||x>=n||y<0||y>=n) continue;
+      const src=tileSource(z,x,y,mode);
+      if(tilePrewarmSeen.has(src.url)) continue;
+      tilePrewarmSeen.add(src.url);
+      urls.push(src.url);
+      if(tilePrewarmSeen.size>=TILE_PREWARM_MAX) return urls;
+    }
+  }
+  return urls;
+}
+
+function runTilePrewarmQueue(urls,serial){
+  const queue=[...urls];
+  const pump=()=>{
+    if(serial!==tilePrewarmSerial) return;
+    while(tilePrewarmActive<4 && queue.length){
+      const url=queue.shift();
+      tilePrewarmActive++;
+      const img=new Image();
+      img.crossOrigin="anonymous";
+      const done=()=>{tilePrewarmActive=Math.max(0,tilePrewarmActive-1);pump();};
+      img.onload=done; img.onerror=done; img.src=url;
+    }
+  };
+  pump();
+}
+
+function warmForeignTileCache(items){
+  const serial=++tilePrewarmSerial;
+  tilePrewarmSeen.clear();
+  tilePrewarmActive=0;
+  const urls=[];
+  let lastWarm=null;
+  const add=(coord,z,radius=null)=>urls.push(...prewarmTileUrlsAround(coord,z,"GLOBAL",radius));
+  const arr=(items||[]).filter(it=>it&&it.coord);
+  for(let i=0;i<arr.length && tilePrewarmSeen.size<TILE_PREWARM_MAX;i++){
+    const it=arr[i], c=it.coord;
+    const foreign=!isTaiwanCoordinate(Number(c[1]),Number(c[0]));
+    if(it.kind==="flight"){
+      // 飛航途中會用 Zoom 2~4；起點、終點與中點都先預抓。
+      const from=it.fromCoord||c;
+      const mid=[(Number(from[0])+Number(c[0]))/2,(Number(from[1])+Number(c[1]))/2];
+      add(mid,2,2); add(mid,3,2); add(mid,4,2);
+      if(foreign){ add(c,8); add(c,6); add(c,4); }
+      lastWarm=c;
+      continue;
+    }
+    if(!foreign) continue;
+    // 同一國外區域只需預抓一次；移動超過約 250 km 再建立下一個預抓中心。
+    if(!lastWarm || haversineKm(lastWarm,c)>=250){
+      add(c,8); add(c,6); add(c,4);
+      lastWarm=c;
+    }
+  }
+  // 放到事件迴圈後方且限 4 併發，不阻塞 JSON 解析、月曆或主畫面。
+  setTimeout(()=>runTilePrewarmQueue(urls,serial),0);
+}
 function worldCenter(){return{x:lon2x(center.lng,zoom),y:lat2y(center.lat,zoom)}}
 function screenPoint(lng,lat){
   const c=worldCenter();
@@ -2037,6 +2136,9 @@ function renderTiles(){
       tileExpected++;
       const img=document.createElement("img");
       img.className="tile";
+      // 匯出模式固定使用 OSM；OSM 圖磚以 anonymous CORS 載入，可安全合成到匯出 Canvas。
+      // NLSC 一般瀏覽維持原載入方式，避免第三方服務若未開 CORS 反而影響畫面。
+      if(src.provider==="OSM") img.crossOrigin="anonymous";
       img.src=src.url;
       img.referrerPolicy="strict-origin-when-cross-origin";
       img.style.left=(tx*TILE-left)+"px";
@@ -2101,34 +2203,20 @@ function drawOverlay(){
 
   const fs=currentFeatures();
 
-  // 動畫完成後的最終世界總覽：全部歷史路線集中在同一張圖，停留在最後畫面。
+  // 動畫完成後的最終總覽，只畫「這一次所選播放範圍」實際跑過的路線。
+  // 例如選單一出國旅程，就不再把更早的歷史路線一起帶進最終畫面。
   if(worldFinalMode){
     photoClearLayer();
-    for(const f of allFeatures){
-      const g=f.geometry||{};
-      if(g.type!=="LineString") continue;
-      const coords=g.coordinates||[];
-      if(coords.length<2 || featureLineSuppressedByFlight(coords)) continue;
+    const finalLines=[...animationDrawnLines];
+    if(animationCurrentLine && animationCurrentLine.length>=2) finalLines.push(animationCurrentLine);
+    for(const coords of finalLines){
+      if(!coords || coords.length<2 || isSuppressedFlightChord(coords)) continue;
       ctx.beginPath();
       let started=false;
       for(const c of coords){
         const q=screenPoint(Number(c[0]),Number(c[1]));
         if(!started){ctx.moveTo(q.x,q.y);started=true;} else ctx.lineTo(q.x,q.y);
       }
-      ctx.strokeStyle=FINAL_WORLD_ROUTE_COLOR;
-      ctx.lineWidth=3;
-      ctx.lineJoin="round";
-      ctx.lineCap="round";
-      ctx.stroke();
-    }
-    // 缺漏跨國補線也一併畫入最後世界總覽。
-    for(const line of animationSyntheticLines){
-      if(!line || line.length<2 || isSuppressedFlightChord(line)) continue;
-      ctx.beginPath();
-      line.forEach((c,i)=>{
-        const q=screenPoint(Number(c[0]),Number(c[1]));
-        if(i===0) ctx.moveTo(q.x,q.y); else ctx.lineTo(q.x,q.y);
-      });
       ctx.strokeStyle=FINAL_WORLD_ROUTE_COLOR;
       ctx.lineWidth=3;
       ctx.lineJoin="round";
@@ -2808,32 +2896,22 @@ function forceCameraUpdateNeeded(coord){
 
 function getAllRouteBounds(){
   let b=null;
-  for(const f of allFeatures){
-    const g=f.geometry||{};
-    if(g.type!=="LineString") continue;
-    for(const c of g.coordinates||[]){
-      if(!c || c.length<2) continue;
-      const lng=Number(c[0]), lat=Number(c[1]);
-      if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-      if(!b) b={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
-      else{
-        b.minLng=Math.min(b.minLng,lng); b.maxLng=Math.max(b.maxLng,lng);
-        b.minLat=Math.min(b.minLat,lat); b.maxLat=Math.max(b.maxLat,lat);
-      }
+  const addCoord=(c)=>{
+    if(!c || c.length<2) return;
+    const lng=Number(c[0]), lat=Number(c[1]);
+    if(!Number.isFinite(lng)||!Number.isFinite(lat)) return;
+    if(!b) b={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
+    else{
+      b.minLng=Math.min(b.minLng,lng); b.maxLng=Math.max(b.maxLng,lng);
+      b.minLat=Math.min(b.minLat,lat); b.maxLat=Math.max(b.maxLat,lat);
     }
-  }
-  for(const line of animationSyntheticLines){
-    for(const c of line||[]){
-      if(!c || c.length<2) continue;
-      const lng=Number(c[0]), lat=Number(c[1]);
-      if(!Number.isFinite(lng)||!Number.isFinite(lat)) continue;
-      if(!b) b={minLng:lng,maxLng:lng,minLat:lat,maxLat:lat};
-      else{
-        b.minLng=Math.min(b.minLng,lng); b.maxLng=Math.max(b.maxLng,lng);
-        b.minLat=Math.min(b.minLat,lat); b.maxLat=Math.max(b.maxLat,lat);
-      }
-    }
-  }
+  };
+
+  // 只以本次動畫已經實際走過的線計算最終範圍。
+  // 這是修正「選單一出國旅程，最後卻從最早歷史一路顯示」的核心。
+  for(const line of animationDrawnLines) for(const c of line||[]) addCoord(c);
+  if(animationCurrentLine) for(const c of animationCurrentLine||[]) addCoord(c);
+  for(const line of animationSyntheticLines) for(const c of line||[]) addCoord(c);
   return b;
 }
 
@@ -2848,7 +2926,7 @@ function showWorldFinalView(){
     zoom=2;
   }
   renderMap();
-  mapStatus.textContent="最終世界路線總覽｜全部歷史紅線";
+  mapStatus.textContent="最終路線總覽｜僅顯示本次播放範圍";
 }
 
 function fitFeatures(fs){
@@ -3228,13 +3306,16 @@ function resetAnimationDrawing(clearUI=true){
   updateKmCounter(0);
   if(animationPreflightTimer){ clearTimeout(animationPreflightTimer); animationPreflightTimer=null; }
   if(clearUI){
+    abortLivePlaybackRecording();
     animationProgress.value=0;
     animationProgress.disabled=true;
     animationStartLabel.textContent="—";
     animationNow.textContent="尚未播放";
     animationCompletedOnce=false;
-    exportBothBtn.disabled=true;
-    exportStatus.textContent="動畫播放完成後即可匯出 WebM＋PNG";
+    downloadWebmBtn.disabled=true;
+    downloadMp4Btn.disabled=true;
+    downloadPngBtn.disabled=true;
+    exportStatus.textContent="播放時同步錄製；暫停或播放完成後，可三種格式任選下載";
   }
   playHistoryBtn.textContent="▶ 歷史動畫";
   pauseHistoryBtn.textContent="⏸ 暫停";
@@ -4245,8 +4326,16 @@ function animationStep(ts){
     animationNow.textContent="播放完成｜最終世界總覽";
     animationCompletedOnce=true;
     showWorldFinalView();
-    exportBothBtn.disabled=exportInProgress;
-    exportStatus.textContent="已完成，可產生動畫 WebM 與世界路線 PNG";
+    setExportButtonsDisabled(true);
+    exportStatus.textContent="播放完成，正在封裝已錄好的動畫檔…";
+    finalizeLivePlaybackRecording(true).then(()=>{
+      if(!exportInProgress){
+        refreshExportButtons();
+        exportStatus.textContent=(liveRecordingBlob||liveMp4Blob)
+          ? "已完成：WebM／MP4／PNG 可任選下載，不會重新播放"
+          : "動畫封裝失敗，請重新播放一次";
+      }
+    });
     if(animationCompleteResolver){
       const resolve=animationCompleteResolver;
       animationCompleteResolver=null;
@@ -4286,6 +4375,9 @@ function startHistoryAnimation(){
   applyInitialPlaybackPreflight(animationItems);
   renderMap();
 
+  // 從第一次正式播放就同步錄製，而不是等使用者按下載後再重播。
+  startLivePlaybackRecording();
+
   // 只留短暫圖磚緩衝，不再於此階段重新掃描全部資料。
   animationPreflightTimer=setTimeout(()=>{
     animationPreflightTimer=null;
@@ -4307,7 +4399,22 @@ pauseHistoryBtn.onclick=()=>{
   animationPaused=!animationPaused;
   pauseHistoryBtn.textContent=animationPaused?"▶ 繼續":"⏸ 暫停";
   pauseFlightAudio(animationPaused);
-  if(!animationPaused){
+  if(animationPaused){
+    pauseLivePlaybackRecording();
+    setExportButtonsDisabled(true);
+    exportStatus.textContent="已暫停：正在整理目前錄影片段…";
+    setTimeout(()=>{
+      if(animationPaused && !exportInProgress){
+        refreshExportButtons();
+        exportStatus.textContent=(liveChunks.length||liveMp4Chunks.length)
+          ? "已暫停：可下載目前為止的 WebM／MP4／PNG，下載後仍可繼續播放"
+          : "已暫停：目前動畫資料仍在整理中…";
+      }
+    },180);
+  }else{
+    resumeLivePlaybackRecording();
+    setExportButtonsDisabled(true);
+    exportStatus.textContent="播放中同步錄製；暫停或播放完成後即可任選下載";
     animationLastTS=0;
     animationRAF=requestAnimationFrame(animationStep);
   }
@@ -4336,7 +4443,7 @@ animationProgress.addEventListener("input",()=>{
   }
 });
 
-// ---------- Export: animation WebM + final world PNG ----------
+// ---------- Export: live-record while playing + instant download ----------
 function preferredRecorderMime(){
   const list=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
   for(const m of list){
@@ -4345,9 +4452,33 @@ function preferredRecorderMime(){
   return "";
 }
 
+function preferredMp4RecorderMime(){
+  const list=["video/mp4;codecs=avc1.42E01E","video/mp4;codecs=avc1.4D401E","video/mp4"];
+  for(const m of list){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return "";
+}
+
+function setExportButtonsDisabled(disabled){
+  downloadWebmBtn.disabled=disabled;
+  downloadMp4Btn.disabled=disabled;
+  downloadPngBtn.disabled=disabled;
+}
+
+function refreshExportButtons(){
+  const availableState=animationPaused || animationCompletedOnce;
+  const hasWebm=animationCompletedOnce ? !!liveRecordingBlob : liveChunks.length>0;
+  const hasMp4=animationCompletedOnce ? !!liveMp4Blob : liveMp4Chunks.length>0;
+  downloadWebmBtn.disabled=exportInProgress || !availableState || !hasWebm;
+  downloadMp4Btn.disabled=exportInProgress || !availableState || !hasMp4;
+  downloadPngBtn.disabled=exportInProgress || !availableState;
+  downloadMp4Btn.title=liveMp4Mime ? "下載真正 MP4 動畫" : "目前瀏覽器不支援 MediaRecorder MP4 輸出";
+}
+
 function safeFileStem(){
   const name=(fileInput.files&&fileInput.files[0]&&fileInput.files[0].name)||"timeline";
-  return name.replace(/\.[^.]+$/,"").replace(/[\\/:*?"<>|]+/g,"_");
+  return name.replace(/\.[^.]+$/," ").trim().replace(/[\\/:*?"<>|]+/g,"_") || "timeline";
 }
 
 function downloadBlob(blob,filename){
@@ -4355,6 +4486,7 @@ function downloadBlob(blob,filename){
   const url=URL.createObjectURL(blob);
   a.href=url;
   a.download=filename;
+  a.style.display="none";
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -4363,119 +4495,265 @@ function downloadBlob(blob,filename){
 
 function waitMs(ms){return new Promise(r=>setTimeout(r,ms));}
 
-async function waitVideoReady(video){
-  if(video.readyState>=2 && video.videoWidth) return;
-  await new Promise((resolve,reject)=>{
-    const done=()=>{cleanup();resolve();};
-    const fail=()=>{cleanup();reject(new Error("無法讀取螢幕擷取畫面"));};
-    const cleanup=()=>{video.removeEventListener("loadeddata",done);video.removeEventListener("error",fail);};
-    video.addEventListener("loadeddata",done,{once:true});
-    video.addEventListener("error",fail,{once:true});
-  });
-}
-
-async function captureMapPngFromStream(stream){
-  showWorldFinalView();
-  await waitMs(900);
-  const video=document.createElement("video");
-  video.muted=true;
-  video.playsInline=true;
-  video.srcObject=stream;
-  video.style.position="fixed";
-  video.style.left="-99999px";
-  document.body.appendChild(video);
-  await video.play();
-  await waitVideoReady(video);
-  await waitMs(250);
-
-  const vw=video.videoWidth, vh=video.videoHeight;
-  if(!vw || !vh) throw new Error("擷取解析度無效");
-
-  // capture-clean 時地圖就是整個內容視窗，因此直接擷取完整分頁畫面即可得到純地圖。
+function makeExportCanvas(){
   const out=document.createElement("canvas");
-  out.width=vw;
-  out.height=vh;
-  const octx=out.getContext("2d");
-  octx.drawImage(video,0,0,vw,vh);
-  video.pause();
-  video.srcObject=null;
-  video.remove();
-  return await new Promise((resolve,reject)=>out.toBlob(b=>b?resolve(b):reject(new Error("PNG 產生失敗")),"image/png"));
+  const scale=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+  out.width=Math.max(2,Math.round(mapWrap.clientWidth*scale));
+  out.height=Math.max(2,Math.round(mapWrap.clientHeight*scale));
+  out.__exportScale=scale;
+  return out;
 }
 
-async function replayForExport(){
-  return new Promise((resolve,reject)=>{
-    animationCompleteResolver=resolve;
-    try{ startHistoryAnimation(); }
-    catch(err){ animationCompleteResolver=null; reject(err); }
+function compositeMapFrame(out){
+  if(!out) return;
+  const octx=out.getContext("2d");
+  const scale=out.__exportScale||1;
+  const w=mapWrap.clientWidth,h=mapWrap.clientHeight;
+  octx.setTransform(scale,0,0,scale,0,0);
+  octx.clearRect(0,0,w,h);
+  octx.fillStyle="#eef2f5";
+  octx.fillRect(0,0,w,h);
+  for(const img of tilesEl.querySelectorAll("img.tile")){
+    if(!img.complete || !img.naturalWidth) continue;
+    const x=parseFloat(img.style.left)||0;
+    const y=parseFloat(img.style.top)||0;
+    try{octx.drawImage(img,x,y,TILE,TILE);}catch(_e){}
+  }
+  try{octx.drawImage(canvas,0,0,w,h);}catch(_e){}
+}
+
+async function waitCurrentTilesForExport(maxMs=3500){
+  const start=performance.now();
+  while(performance.now()-start<maxMs){
+    const expected=Math.max(0,tileExpected);
+    if(expected===0 || tileSettled>=expected) return;
+    await waitMs(40);
+  }
+}
+
+async function canvasToPngBlob(out){
+  return await new Promise((resolve,reject)=>{
+    try{out.toBlob(b=>b?resolve(b):reject(new Error("PNG 產生失敗")),"image/png");}
+    catch(err){reject(err);}
   });
 }
 
-async function exportAnimationAndWorld(){
-  if(exportInProgress || !animationCompletedOnce) return;
-  if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
-    alert("此瀏覽器不支援分頁錄製。請使用最新版 Chrome 或 Edge。");
-    return;
-  }
-  if(!window.MediaRecorder){
-    alert("此瀏覽器不支援 WebM 錄影輸出。");
-    return;
-  }
+function stopLiveCaptureLoop(){
+  if(liveCaptureRAF){cancelAnimationFrame(liveCaptureRAF);liveCaptureRAF=0;}
+}
 
-  exportInProgress=true;
-  exportBothBtn.disabled=true;
-  exportStatus.textContent="請在瀏覽器視窗選擇『目前這個分頁』，系統會自動重播並產生兩個檔案…";
+function startLiveCaptureLoop(){
+  stopLiveCaptureLoop();
+  const loop=()=>{
+    if(!liveRecordingStarted || !liveExportCanvas) return;
+    compositeMapFrame(liveExportCanvas);
+    liveCaptureRAF=requestAnimationFrame(loop);
+  };
+  loop();
+}
 
-  let stream=null;
-  let recorder=null;
+function abortLivePlaybackRecording(){
+  liveRecordingSerial++;
+  stopLiveCaptureLoop();
+  if(liveRecorder && liveRecorder.state!=="inactive"){
+    try{liveRecorder.stop();}catch(_e){}
+  }
+  if(liveStream){for(const t of liveStream.getTracks()) try{t.stop();}catch(_e){}}
+  if(liveMp4Recorder && liveMp4Recorder.state!=="inactive"){try{liveMp4Recorder.stop();}catch(_e){}}
+  liveExportCanvas=null; liveRecorder=null; liveMp4Recorder=null; liveStream=null; liveChunks=[]; liveMp4Chunks=[];
+  liveRecordingBlob=null; liveMp4Blob=null; liveRecordingMime=""; liveMp4Mime=""; liveRecordingStarted=false; liveRecordingFinalizing=null;
+  exportCaptureMode=false;
+}
+
+function startLivePlaybackRecording(){
+  abortLivePlaybackRecording();
+  if(!window.MediaRecorder) return false;
   try{
-    stream=await navigator.mediaDevices.getDisplayMedia({video:{frameRate:30},audio:false});
-    const mime=preferredRecorderMime();
-    const chunks=[];
-    recorder=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:6000000}:{videoBitsPerSecond:6000000});
-    recorder.addEventListener("dataavailable",e=>{if(e.data&&e.data.size) chunks.push(e.data);});
-    const stopped=new Promise((resolve,reject)=>{
-      recorder.addEventListener("stop",resolve,{once:true});
-      recorder.addEventListener("error",()=>reject(new Error("動畫錄製失敗")),{once:true});
+    exportCaptureMode=true;
+    renderMap(true);
+    liveExportCanvas=makeExportCanvas();
+    compositeMapFrame(liveExportCanvas);
+    liveStream=liveExportCanvas.captureStream(30);
+    liveRecordingMime=preferredRecorderMime();
+    liveChunks=[]; liveRecordingBlob=null;
+    liveRecorder=new MediaRecorder(liveStream,liveRecordingMime?{mimeType:liveRecordingMime,videoBitsPerSecond:7000000}:{videoBitsPerSecond:7000000});
+    const recorderSerial=++liveRecordingSerial;
+    liveRecorder.addEventListener("dataavailable",e=>{
+      if(recorderSerial===liveRecordingSerial && e.data&&e.data.size) liveChunks.push(e.data);
     });
+    liveRecorder.addEventListener("error",e=>console.error("live recorder error",e));
 
-    document.body.classList.add("capture-clean");
-    await waitMs(350);
-    recorder.start(1000);
-    exportStatus.textContent="正在錄製歷史動畫…請勿切換分頁";
-    await replayForExport();
+    liveMp4Mime=preferredMp4RecorderMime();
+    liveMp4Chunks=[]; liveMp4Blob=null; liveMp4Recorder=null;
+    if(liveMp4Mime){
+      try{
+        liveMp4Recorder=new MediaRecorder(liveStream,{mimeType:liveMp4Mime,videoBitsPerSecond:7000000});
+        liveMp4Recorder.addEventListener("dataavailable",e=>{
+          if(recorderSerial===liveRecordingSerial && e.data&&e.data.size) liveMp4Chunks.push(e.data);
+        });
+        liveMp4Recorder.addEventListener("error",e=>console.error("live MP4 recorder error",e));
+      }catch(err){
+        console.warn("MP4 MediaRecorder unavailable",err);
+        liveMp4Recorder=null; liveMp4Mime=""; liveMp4Chunks=[];
+      }
+    }
 
-    // 最後世界總覽多停留 2 秒，讓影片結尾清楚停在總覽圖。
-    await waitMs(2000);
-    const pngBlob=await captureMapPngFromStream(stream);
-
-    recorder.stop();
-    await stopped;
-    const videoBlob=new Blob(chunks,{type:recorder.mimeType||"video/webm"});
-    const stem=safeFileStem();
-    downloadBlob(videoBlob,`${stem}_歷史動畫.webm`);
-    await waitMs(250);
-    downloadBlob(pngBlob,`${stem}_最終世界路線圖.png`);
-    exportStatus.textContent="完成：已產生歷史動畫 WebM＋最終世界路線 PNG";
+    liveRecorder.start(250);
+    if(liveMp4Recorder) liveMp4Recorder.start(250);
+    liveRecordingStarted=true;
+    startLiveCaptureLoop();
+    setExportButtonsDisabled(true);
+    exportStatus.textContent=liveMp4Recorder
+      ? "播放中同步錄製 WebM＋MP4；暫停或播放完成後可三種任選下載"
+      : "播放中同步錄製 WebM；此瀏覽器不支援直接 MP4，仍可下載 WebM／PNG";
+    return true;
   }catch(err){
     console.error(err);
-    exportStatus.textContent="匯出失敗："+(err&&err.message?err.message:String(err));
-    alert("匯出失敗："+(err&&err.message?err.message:String(err))+"\n\n請確認螢幕分享時選擇『目前這個分頁』。");
-  }finally{
-    if(recorder && recorder.state!=="inactive"){
-      try{recorder.stop();}catch(_e){}
-    }
-    if(stream){
-      for(const t of stream.getTracks()) try{t.stop();}catch(_e){}
-    }
-    document.body.classList.remove("capture-clean");
-    exportInProgress=false;
-    exportBothBtn.disabled=!animationCompletedOnce;
-    showWorldFinalView();
+    abortLivePlaybackRecording();
+    exportStatus.textContent="無法啟動同步錄影："+(err&&err.message?err.message:String(err));
+    return false;
   }
 }
 
-exportBothBtn.addEventListener("click",exportAnimationAndWorld);
+function pauseLivePlaybackRecording(){
+  if(!liveRecorder || !liveRecordingStarted) return;
+  try{
+    if(liveRecorder.state==="recording"){
+      liveRecorder.requestData();
+      liveRecorder.pause();
+      if(liveMp4Recorder && liveMp4Recorder.state==="recording"){
+        try{liveMp4Recorder.requestData();liveMp4Recorder.pause();}catch(_e){}
+      }
+    }
+  }catch(_e){}
+}
+
+function resumeLivePlaybackRecording(){
+  if(!liveRecorder || !liveRecordingStarted) return;
+  try{if(liveRecorder.state==="paused") liveRecorder.resume();}catch(_e){}
+  try{if(liveMp4Recorder && liveMp4Recorder.state==="paused") liveMp4Recorder.resume();}catch(_e){}
+}
+
+async function snapshotCurrentRecordedBlob(){
+  if(liveRecordingBlob) return liveRecordingBlob;
+  if(!liveRecorder || !liveRecordingStarted || !liveChunks.length) throw new Error("目前尚未累積足夠的動畫影格");
+  try{if(liveRecorder.state!=="inactive") liveRecorder.requestData();}catch(_e){}
+  await waitMs(180);
+  const parts=liveChunks.slice();
+  if(!parts.length) throw new Error("目前尚未累積足夠的動畫影格");
+  const blob=new Blob(parts,{type:liveRecorder.mimeType||liveRecordingMime||"video/webm"});
+  if(blob.size<1024) throw new Error("動畫資料量不足，請再播放幾秒後下載");
+  return blob;
+}
+
+async function snapshotCurrentMp4Blob(){
+  if(liveMp4Blob) return liveMp4Blob;
+  if(!liveMp4Recorder || !liveRecordingStarted || !liveMp4Chunks.length) throw new Error("目前瀏覽器未建立 MP4 錄影資料");
+  try{if(liveMp4Recorder.state!=="inactive") liveMp4Recorder.requestData();}catch(_e){}
+  await waitMs(180);
+  const parts=liveMp4Chunks.slice();
+  if(!parts.length) throw new Error("目前尚未累積足夠的 MP4 影格");
+  const blob=new Blob(parts,{type:liveMp4Recorder.mimeType||liveMp4Mime||"video/mp4"});
+  if(blob.size<1024) throw new Error("MP4 資料量不足，請再播放幾秒後下載");
+  return blob;
+}
+
+async function finalizeLivePlaybackRecording(includeFinalHold=false){
+  if(liveRecordingBlob) return liveRecordingBlob;
+  if(liveRecordingFinalizing) return liveRecordingFinalizing;
+  if(!liveRecorder || !liveRecordingStarted) return null;
+  liveRecordingFinalizing=(async()=>{
+    try{
+      if(liveRecorder.state==="paused") liveRecorder.resume();
+      await waitCurrentTilesForExport(3000);
+      compositeMapFrame(liveExportCanvas);
+      if(includeFinalHold) await waitMs(900);
+      compositeMapFrame(liveExportCanvas);
+      try{liveRecorder.requestData();}catch(_e){}
+      try{if(liveMp4Recorder && liveMp4Recorder.state!=="inactive") liveMp4Recorder.requestData();}catch(_e){}
+      await waitMs(120);
+      const stopped=new Promise(resolve=>{
+        if(!liveRecorder || liveRecorder.state==="inactive") return resolve();
+        liveRecorder.addEventListener("stop",resolve,{once:true});
+      });
+      const mp4Stopped=new Promise(resolve=>{
+        if(!liveMp4Recorder || liveMp4Recorder.state==="inactive") return resolve();
+        liveMp4Recorder.addEventListener("stop",resolve,{once:true});
+      });
+      if(liveRecorder && liveRecorder.state!=="inactive") liveRecorder.stop();
+      if(liveMp4Recorder && liveMp4Recorder.state!=="inactive") liveMp4Recorder.stop();
+      await Promise.all([stopped,mp4Stopped]);
+      stopLiveCaptureLoop();
+      liveRecordingBlob=new Blob(liveChunks.slice(),{type:liveRecorder?.mimeType||liveRecordingMime||"video/webm"});
+      if(liveRecordingBlob.size<1024) liveRecordingBlob=null;
+      if(liveMp4Chunks.length){
+        liveMp4Blob=new Blob(liveMp4Chunks.slice(),{type:liveMp4Recorder?.mimeType||liveMp4Mime||"video/mp4"});
+        if(liveMp4Blob.size<1024) liveMp4Blob=null;
+      }else liveMp4Blob=null;
+      if(liveStream){for(const t of liveStream.getTracks()) try{t.stop();}catch(_e){}}
+      liveStream=null; liveRecordingStarted=false; exportCaptureMode=false;
+      return liveRecordingBlob;
+    }catch(err){
+      console.error(err); exportCaptureMode=false; return null;
+    }finally{liveRecordingFinalizing=null;}
+  })();
+  return liveRecordingFinalizing;
+}
+
+async function ensureExportReady(){
+  if(animationCompletedOnce){
+    if(!liveRecordingBlob && !liveMp4Blob) await finalizeLivePlaybackRecording(false);
+  }
+}
+
+function exportSuffix(){return animationPaused && !animationCompletedOnce ? "_目前為止" : "_完整";}
+
+async function downloadWebmOnly(){
+  if(exportInProgress) return;
+  exportInProgress=true; refreshExportButtons();
+  try{
+    exportStatus.textContent="正在準備 WebM 動畫…";
+    await ensureExportReady();
+    const blob=animationCompletedOnce ? liveRecordingBlob : await snapshotCurrentRecordedBlob();
+    if(!blob) throw new Error("找不到 WebM 動畫資料");
+    downloadBlob(blob,`${safeFileStem()}${exportSuffix()}_動畫.webm`);
+    exportStatus.textContent="WebM 已下載";
+  }catch(err){alert("下載 WebM 失敗："+(err?.message||err));}
+  finally{exportInProgress=false;refreshExportButtons();}
+}
+
+async function downloadMp4Only(){
+  if(exportInProgress) return;
+  exportInProgress=true; refreshExportButtons();
+  try{
+    exportStatus.textContent="正在準備 MP4 動畫…";
+    await ensureExportReady();
+    const blob=animationCompletedOnce ? liveMp4Blob : await snapshotCurrentMp4Blob();
+    if(!blob) throw new Error("目前瀏覽器不支援直接產生 MP4；請改下載 WebM");
+    downloadBlob(blob,`${safeFileStem()}${exportSuffix()}_動畫.mp4`);
+    exportStatus.textContent="MP4 已下載";
+  }catch(err){alert("下載 MP4 失敗："+(err?.message||err));}
+  finally{exportInProgress=false;refreshExportButtons();}
+}
+
+async function downloadPngOnly(){
+  if(exportInProgress) return;
+  exportInProgress=true; refreshExportButtons();
+  try{
+    exportStatus.textContent="正在產生目前路線 PNG…";
+    await waitCurrentTilesForExport(2500);
+    const out=makeExportCanvas();
+    compositeMapFrame(out);
+    const blob=await canvasToPngBlob(out);
+    downloadBlob(blob,`${safeFileStem()}${exportSuffix()}_路線圖.png`);
+    exportStatus.textContent="PNG 路線圖已下載";
+  }catch(err){alert("下載 PNG 失敗："+(err?.message||err));}
+  finally{exportInProgress=false;refreshExportButtons();}
+}
+
+downloadWebmBtn.addEventListener("click",downloadWebmOnly);
+downloadMp4Btn.addEventListener("click",downloadMp4Only);
+downloadPngBtn.addEventListener("click",downloadPngOnly);
 
 // ---------- Google Sheets usage counter ----------
 const COUNTER_API_URL = "https://script.google.com/macros/s/AKfycbwcTghitEU1hRd8hM5obOcBitqJ4kgPxa2iNR-z9YTxWQxFR5poC23Xx6XPRQ2c2NvnWg/exec";
@@ -4718,6 +4996,9 @@ fileInput.addEventListener("change",async e=>{
     travelCount.textContent=`出國日：${foreignDates.length.toLocaleString()} 天`;
     refreshTripSelector();
     syncTripScopeUI();
+
+    // 背景默默預抓跨國／國外圖層，不等待、不阻塞操作。
+    warmForeignTileCache(cachedAllAnimationItems);
 
     if(!dataDates.length){
       throw new Error("時間軸中沒有可辨識的日期。");
