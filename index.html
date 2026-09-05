@@ -289,6 +289,10 @@ button{cursor:pointer}
   padding:8px 11px;
 }
 .toolbar button:hover{background:#f8fafc}.toolbar button#fitBtn{font-weight:700;border-color:#9bbcf5;background:#f5f9ff}
+.zoom-level-info{display:flex;align-items:center;padding:0 8px;border:1px solid var(--line);border-radius:9px;background:#fafbfc;color:#5f6368;font-size:12px;font-weight:700;white-space:nowrap}
+.custom-range{display:flex;align-items:center;gap:5px;flex-wrap:nowrap}
+.custom-range input[type=date]{width:138px;min-width:0;border:1px solid var(--line);background:#fff;border-radius:9px;padding:6px 8px;color:#374151}
+.custom-range .range-sep{color:var(--muted);font-size:12px}
 .usage-counter{
   margin-left:auto;
   flex:0 0 auto;
@@ -524,15 +528,22 @@ body.capture-clean .mapStatus{bottom:28px}
         <label>範圍
           <select id="animationScope">
             <option value="all">全部歷史</option>
-            <option value="trip">單一出國旅程</option>
+            <option id="scopeYearOption" value="year">目前年度</option>
             <option value="month">目前月份</option>
             <option value="day">目前日期</option>
+            <option value="custom">自訂時間起迄</option>
+            <option value="trip">單一出國旅程</option>
             <option value="foreign">全部出國日</option>
           </select>
         </label>
         <label id="tripSelectLabel" style="display:none">旅程
           <select id="tripSelect" disabled></select>
         </label>
+        <div id="customRangeLabel" class="custom-range" style="display:none">
+          <input id="customStartDate" type="date" aria-label="自訂開始日期">
+          <span class="range-sep">～</span>
+          <input id="customEndDate" type="date" aria-label="自訂結束日期">
+        </div>
         <label class="speed-slider-label">速度
           <input id="animationSpeed" type="range" min="0" max="14" step="1" value="5" aria-label="動畫播放速度（鏡頭速度獨立）">
           <span id="animationSpeedValue" class="speed-value">10×</span>
@@ -564,8 +575,9 @@ body.capture-clean .mapStatus{bottom:28px}
     </div>
     <div class="toolbar">
       <button id="fitBtn">縮放至當日全部路線</button>
-      <button id="zoomInBtn">放大</button>
-      <button id="zoomOutBtn">縮小</button>
+      <button id="zoomInBtn" title="Zoom +1">放大＋1</button>
+      <button id="zoomOutBtn" title="Zoom -1">縮小－1</button>
+      <span id="zoomLevelInfo" class="zoom-level-info">Zoom 8｜一般 7–19／動畫 2–19</span>
     </div>
 
     <div id="mapWrap">
@@ -701,8 +713,13 @@ const playHistoryBtn = $("playHistoryBtn");
 const pauseHistoryBtn = $("pauseHistoryBtn");
 const stopHistoryBtn = $("stopHistoryBtn");
 const animationScope = $("animationScope");
+const scopeYearOption = $("scopeYearOption");
 const tripSelectLabel = $("tripSelectLabel");
 const tripSelect = $("tripSelect");
+const customRangeLabel = $("customRangeLabel");
+const customStartDate = $("customStartDate");
+const customEndDate = $("customEndDate");
+const zoomLevelInfo = $("zoomLevelInfo");
 const animationSpeed = $("animationSpeed");
 const animationSpeedValue = $("animationSpeedValue");
 const animationKmValue = $("animationKmValue");
@@ -745,6 +762,13 @@ let tileSettled = 0;
 let tileBad = 0;
 let tileLoadStartedAt = 0;
 let tileReadyAt = 0;
+
+// 手動 Zoom：播放中採「最後一次點擊為準」，等底圖完成後才繼續動畫。
+let animationUserZoomOverride=false;
+let pendingUserZoom=null;
+let userZoomApplyTimer=null;
+let userZoomInteractionPending=false;
+const USER_ZOOM_DEBOUNCE_MS=320;
 
 // ---------- History animation ----------
 let animationItems = [];
@@ -1407,6 +1431,7 @@ function fmtDate(y,m,d){
 function renderCalendar(){
   daysEl.innerHTML="";
   calTitle.textContent=`${calendarYear} 年 ${calendarMonth+1} 月`;
+  if(scopeYearOption) scopeYearOption.textContent=`目前年度（${calendarYear}）`;
 
   if(travelFilterOn){
     const months=foreignMonthKeys();
@@ -1992,12 +2017,40 @@ function refreshTripSelector(){
   tripSelect.disabled=!detectedTrips.length;
 }
 
+function ensureCustomRangeDefaults(){
+  if(!dataDates.length) return;
+  const first=dataDates[0], last=dataDates[dataDates.length-1];
+  customStartDate.min=first; customStartDate.max=last;
+  customEndDate.min=first; customEndDate.max=last;
+  if(!customStartDate.value) customStartDate.value=first;
+  if(!customEndDate.value) customEndDate.value=last;
+}
+function normalizedCustomDateRange(){
+  ensureCustomRangeDefaults();
+  let start=customStartDate.value||dataDates[0]||"";
+  let end=customEndDate.value||dataDates[dataDates.length-1]||"";
+  if(start && end && start>end){ const t=start; start=end; end=t; }
+  return {start,end};
+}
 function syncTripScopeUI(){
-  const on=animationScope.value==="trip";
-  tripSelectLabel.style.display=on?"flex":"none";
-  tripSelect.disabled=!on || !detectedTrips.length;
+  const tripOn=animationScope.value==="trip";
+  const customOn=animationScope.value==="custom";
+  tripSelectLabel.style.display=tripOn?"flex":"none";
+  tripSelect.disabled=!tripOn || !detectedTrips.length;
+  customRangeLabel.style.display=customOn?"flex":"none";
+  if(customOn) ensureCustomRangeDefaults();
 }
 animationScope.addEventListener("change",syncTripScopeUI);
+function normalizeCustomRangeInputs(){
+  if(!customStartDate.value || !customEndDate.value) return;
+  if(customStartDate.value>customEndDate.value){
+    const t=customStartDate.value;
+    customStartDate.value=customEndDate.value;
+    customEndDate.value=t;
+  }
+}
+customStartDate.addEventListener("change",normalizeCustomRangeInputs);
+customEndDate.addEventListener("change",normalizeCustomRangeInputs);
 
 // ---------- Map ----------
 function lon2x(lon,z){return(lon+180)/360*Math.pow(2,z)*TILE}
@@ -2563,7 +2616,8 @@ let lastRenderedTileCenter=null;
 let animationOverlayWaitingForTiles=false;
 let animationCameraHoldReason="";
 function beginCameraTileHold(maxMs=12000,reason="底圖切換"){
-  if(!animationRunning) return;
+  // 暫停時仍要立即重繪已完成路線；真正恢復播放時再檢查底圖是否載完。
+  if(!animationRunning || animationPaused) return;
   // 舊版只等約 1.6 秒，慢 PC / 慢網路很容易底圖尚未完成就放行。
   // 新版至少提供 8 秒安全窗，預設 12 秒；正常機器圖磚完成後會立即放行，不會白等。
   animationCameraHoldBatch=tileBatchId;
@@ -2631,6 +2685,7 @@ function renderMap(forceTiles=false){
   }
   // 鏡頭切換期間先只載底圖，不把新位置／新路線搶先畫在尚未完成的圖層上。
   if(!(animationRunning && animationOverlayWaitingForTiles)) drawOverlay();
+  updateZoomLevelInfo(Number.isFinite(pendingUserZoom)?pendingUserZoom:null);
 }
 
 function updateAnimationBounds(coord){
@@ -2821,7 +2876,7 @@ function applyStableCameraView(coord,inTaiwan,force=false){
 }
 
 function preflightForeignCamera(item,itemIndex){
-  if(!animationFollow.checked || !item || !item.coord || item.kind==="flight") return;
+  if(!animationFollow.checked || animationUserZoomOverride || !item || !item.coord || item.kind==="flight") return;
   const cur=[Number(item.coord[0]),Number(item.coord[1])];
   if(!Number.isFinite(cur[0])||!Number.isFinite(cur[1])||isTaiwanCoordinate(cur[1],cur[0])) return;
   let km=0;
@@ -2846,6 +2901,14 @@ function updateAnimationCamera(item){
   updateAnimationBounds(item.coord);
   const inTaiwan=isTaiwanCoordinate(lat,lng);
   const nextMode=inTaiwan ? "TAIWAN" : "FOREIGN";
+  if(animationUserZoomOverride){
+    // 使用者手動調 Zoom 後，同一段播放不再由自動鏡頭覆蓋 Zoom；仍保留低頻平移跟隨。
+    animationRegionMode=nextMode;
+    animationRegionLastCoord=item.coord;
+    addCameraTrail(item);
+    gentlyPanToward(item.coord,false);
+    return;
+  }
   const jumpKm=haversineKm(animationRegionLastCoord,item.coord);
   const now=performance.now();
 
@@ -3057,10 +3120,60 @@ canvas.addEventListener("click",e=>{
   if(best) showPopup(best.feature,x,y);
 });
 
+function animationMapIsActive(){
+  return Boolean(animationRunning || animationPaused || animationDrawnLines.length || animationDrawnPoints.length || animationFlightMode || worldFinalMode);
+}
+function currentManualZoomMin(){
+  return animationMapIsActive() ? ANIMATION_MIN_ZOOM : MIN_ZOOM;
+}
+function updateZoomLevelInfo(pending=null){
+  if(!zoomLevelInfo) return;
+  const min=currentManualZoomMin();
+  const current=Number(zoom);
+  if(Number.isFinite(pending) && pending!==current){
+    zoomLevelInfo.textContent=`Zoom ${current} → ${pending}｜可調 ${min}–${MAX_ZOOM}（每次 ±1）`;
+  }else{
+    zoomLevelInfo.textContent=`Zoom ${current}｜可調 ${min}–${MAX_ZOOM}（每次 ±1）`;
+  }
+}
+function cancelPendingUserZoom(){
+  if(userZoomApplyTimer){clearTimeout(userZoomApplyTimer);userZoomApplyTimer=null;}
+  pendingUserZoom=null;
+  userZoomInteractionPending=false;
+  updateZoomLevelInfo();
+}
+function requestUserZoom(delta){
+  const min=currentManualZoomMin();
+  const base=Number.isFinite(pendingUserZoom)?pendingUserZoom:zoom;
+  const target=Math.max(min,Math.min(MAX_ZOOM,base+delta));
+  pendingUserZoom=target;
+
+  if(animationMapIsActive()) animationUserZoomOverride=true;
+  // 播放中從第一次點擊開始就停止推進，避免高速動畫在連點期間繼續吃資料。
+  userZoomInteractionPending=Boolean(animationRunning && !animationPaused);
+  updateZoomLevelInfo(target);
+  if(userZoomApplyTimer) clearTimeout(userZoomApplyTimer);
+
+  userZoomApplyTimer=setTimeout(()=>{
+    userZoomApplyTimer=null;
+    const finalZoom=Number.isFinite(pendingUserZoom)?pendingUserZoom:zoom;
+    pendingUserZoom=null;
+    zoom=finalZoom;
+    userZoomInteractionPending=false;
+    // forceTiles=true：不只縮放 Canvas 路線，也強制重載對應 Zoom 底圖。
+    // 播放中 renderMap 會自動進入 camera tile hold，待這批圖磚完成後才續畫線。
+    renderMap(true);
+    updateZoomLevelInfo();
+    if(animationRunning && !animationPaused){
+      animationLastTS=0;
+      if(!animationRAF) animationRAF=requestAnimationFrame(animationStep);
+    }
+  },USER_ZOOM_DEBOUNCE_MS);
+}
+
 canvas.addEventListener("wheel",e=>{
   e.preventDefault();
-  zoom=Math.max(MIN_ZOOM,Math.min(MAX_ZOOM,zoom+(e.deltaY<0?1:-1)));
-  renderMap();
+  requestUserZoom(e.deltaY<0?1:-1);
 },{passive:false});
 
 canvas.addEventListener("pointerdown",e=>{
@@ -3080,14 +3193,23 @@ canvas.addEventListener("pointerup",()=>{dragging=false;dragStart=null});
 canvas.addEventListener("pointercancel",()=>{dragging=false;dragStart=null});
 
 $("fitBtn").onclick=()=>{
+  animationUserZoomOverride=false;
+  cancelPendingUserZoom();
   if(!selectedDate) return;
   const allToday=dateIndex.get(selectedDate)||[];
   if(allToday.length){fitFeatures(allToday);return;}
   if(photoDateIndex.has(selectedDate)) fitPhotoOnlyDate(selectedDate);
 };
-$("zoomInBtn").onclick=()=>{zoom=Math.min(MAX_ZOOM,zoom+1);renderMap()};
-$("zoomOutBtn").onclick=()=>{zoom=Math.max(MIN_ZOOM,zoom-1);renderMap()};
+$("zoomInBtn").onclick=()=>requestUserZoom(1);
+$("zoomOutBtn").onclick=()=>requestUserZoom(-1);
+updateZoomLevelInfo();
 showRaw.onchange=()=>{if(selectedDate) renderSelectedDate()};
+animationFollow.addEventListener("change",()=>{
+  if(animationFollow.checked){
+    animationUserZoomOverride=false;
+    cancelPendingUserZoom();
+  }
+});
 
 window.addEventListener("resize",()=>{if(selectedDate) renderMap()});
 
@@ -3130,6 +3252,12 @@ function getAnimationSourceFeatures(){
   const scope=animationScope.value;
   if(!dataDates.length) return [];
   if(scope==="day") return selectedDate ? (dateIndex.get(selectedDate)||[]) : [];
+  if(scope==="year") return allFeatures.filter(f=>featureDate(f).slice(0,4)===String(calendarYear));
+  if(scope==="custom"){
+    const {start,end}=normalizedCustomDateRange();
+    if(!start || !end) return [];
+    return allFeatures.filter(f=>{const d=featureDate(f); return d && d>=start && d<=end;});
+  }
   if(scope==="trip"){
     const t=detectedTrips[Number(tripSelect.value)];
     if(!t) return [];
@@ -3302,6 +3430,8 @@ function resetAnimationDrawing(clearUI=true){
   animationLandingPhase=null;
   animationCameraHoldUntil=0;
   animationCameraHoldBatch=0;
+  animationUserZoomOverride=false;
+  cancelPendingUserZoom();
   animationTweenDuration=180;
   updateKmCounter(0);
   if(animationPreflightTimer){ clearTimeout(animationPreflightTimer); animationPreflightTimer=null; }
@@ -3710,7 +3840,7 @@ function beginFlightPresentation(item){
   animationFlightMode=true;
   // 飛航期間完全忽略速度倍率；不改速度滑桿，落地後自然回到原本節奏。
   animationFlightRestoreSpeed=getAnimationSpeed();
-  setFlightWorldView(item.fromCoord,item.coord);
+  if(!animationUserZoomOverride) setFlightWorldView(item.fromCoord,item.coord);
   renderMap();
 }
 
@@ -3835,6 +3965,10 @@ function maybeAdvanceLandingCameraPhase(){
 
 function setLandingViewImmediate(index,dest){
   if(!dest) return;
+  if(animationUserZoomOverride){
+    animationLandingPhase=null;
+    return;
+  }
   const d=[Number(dest[0]),Number(dest[1])];
   if(!Number.isFinite(d[0])||!Number.isFinite(d[1])) return;
 
@@ -4073,6 +4207,10 @@ function preflightTaiwanCamera(previousCoord,item,itemIndex){
   const cur=[Number(item.coord[0]),Number(item.coord[1])];
   if(!Number.isFinite(cur[0])||!Number.isFinite(cur[1])) return;
   if(!isTaiwanCoordinate(cur[1],cur[0])) return;
+  if(animationUserZoomOverride){
+    applyTaiwanAutoSpeed(true);
+    return;
+  }
 
   // 臺灣一律完整全臺，不再因短距/長距切換局部視角。
   applyTaiwanAutoSpeed(true);
@@ -4109,7 +4247,7 @@ function consumeAnimationItem(item,itemIndex){
     const bTaiwan=isTaiwanCoordinate(Number(item.coord[1]),Number(item.coord[0]));
     const wide=aTaiwan && bTaiwan && segmentKm>=TAIWAN_WIDE_RANGE_KM;
     setAnimationSpeedValue(10,true);
-    if(wide && taiwanCameraMode!=="WIDE") applyTaiwanCameraImmediate(true,item.coord);
+    if(!animationUserZoomOverride && wide && taiwanCameraMode!=="WIDE") applyTaiwanCameraImmediate(true,item.coord);
   }
 
   const speed=getAnimationSpeed();
@@ -4185,6 +4323,13 @@ function updateAnimationUI(){
 
 function animationStep(ts){
   if(!animationRunning || animationPaused) return;
+  if(userZoomInteractionPending){
+    // 連續點擊放大／縮小期間完全不推進資料；等最後一次點擊決定 Zoom 後再載圖。
+    animationLastTS=ts;
+    drawOverlay();
+    animationRAF=requestAnimationFrame(animationStep);
+    return;
+  }
   maybeAdvanceLandingCameraPhase();
   // 國外落地的「全國總覽」階段尚未結束時，暫停路線，確保看得到國家尺度再切當地。
   if(animationLandingPhase){
@@ -4415,6 +4560,10 @@ pauseHistoryBtn.onclick=()=>{
     resumeLivePlaybackRecording();
     setExportButtonsDisabled(true);
     exportStatus.textContent="播放中同步錄製；暫停或播放完成後即可任選下載";
+    // 若暫停期間有調整 Zoom，先等目前這批底圖完成，再讓路線繼續前進。
+    if(tileExpected>0 && tileSettled<tileExpected){
+      beginCameraTileHold(12000,`恢復播放｜等待 Zoom ${zoom} 底圖`);
+    }
     animationLastTS=0;
     animationRAF=requestAnimationFrame(animationStep);
   }
@@ -4995,6 +5144,8 @@ fileInput.addEventListener("change",async e=>{
     travelFilterBtn.textContent="出國日";
     travelCount.textContent=`出國日：${foreignDates.length.toLocaleString()} 天`;
     refreshTripSelector();
+    customStartDate.value=""; customEndDate.value="";
+    ensureCustomRangeDefaults();
     syncTripScopeUI();
 
     // 背景默默預抓跨國／國外圖層，不等待、不阻塞操作。
@@ -5050,6 +5201,10 @@ fileInput.addEventListener("change",async e=>{
     travelFilterBtn.textContent="出國日";
     travelCount.textContent="尚未載入";
     selectedDate=null;
+    customStartDate.value=""; customEndDate.value="";
+    customStartDate.removeAttribute("min"); customStartDate.removeAttribute("max");
+    customEndDate.removeAttribute("min"); customEndDate.removeAttribute("max");
+    syncTripScopeUI();
     fileInfo.textContent="讀取失敗："+err.message;
     daysEl.innerHTML="";
     currentDateEl.textContent="尚未選擇";
