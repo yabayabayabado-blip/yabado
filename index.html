@@ -970,6 +970,11 @@ function parseSemanticSegments(data){
           out.push(pointFeature(c[0],c[1],{
             segment_no:i+1,type,name,start_time:s,end_time:e,
             activity_type:atype,place_id:"",
+            segment_start_time:st,
+            segment_end_time:et,
+            distance_meters:Number(act.distanceMeters)||0,
+            start_tz_offset_minutes:Number.isFinite(Number(seg.startTimeTimezoneUtcOffsetMinutes)) ? Number(seg.startTimeTimezoneUtcOffsetMinutes) : null,
+            end_tz_offset_minutes:Number.isFinite(Number(seg.endTimeTimezoneUtcOffsetMinutes)) ? Number(seg.endTimeTimezoneUtcOffsetMinutes) : null,
             source:`semanticSegments.activity.${key}`
           }));
         }
@@ -994,7 +999,10 @@ function parseSemanticSegments(data){
           name:"移動路線",
           start_time:st,
           end_time:et,
-          activity_type:"",
+          activity_type:(seg.activity && typeof seg.activity==="object") ? ((seg.activity.topCandidate||{}).type||seg.activity.activityType||"") : "",
+          distance_meters:(seg.activity && typeof seg.activity==="object") ? (Number(seg.activity.distanceMeters)||0) : 0,
+          start_tz_offset_minutes:Number.isFinite(Number(seg.startTimeTimezoneUtcOffsetMinutes)) ? Number(seg.startTimeTimezoneUtcOffsetMinutes) : null,
+          end_tz_offset_minutes:Number.isFinite(Number(seg.endTimeTimezoneUtcOffsetMinutes)) ? Number(seg.endTimeTimezoneUtcOffsetMinutes) : null,
           source:"semanticSegments.timelinePath"
         }));
       }
@@ -1254,10 +1262,18 @@ function timelineInputDiagnostics(rawData, normalizedData, parsed, iosBare){
   return diag;
 }
 
+function markTimelineInputFormat(parsed,format){
+  for(const f of parsed?.features||[]){
+    if(!f.properties) f.properties={};
+    f.properties.input_format=format;
+  }
+  return parsed;
+}
+
 function parseTimelineCompatible(rawData){
   // Android / legacy path: call the original parser with the original object, unchanged.
   if(!Array.isArray(rawData)){
-    const parsed=parseTimeline(rawData);
+    const parsed=markTimelineInputFormat(parseTimeline(rawData),"android-legacy");
     return {
       ...parsed,
       sourceFormat:"既有 Android / Google Timeline 格式",
@@ -1268,7 +1284,7 @@ function parseTimelineCompatible(rawData){
   // iOS path: only bare arrays are normalized. Never modifies the Android object path.
   if(looksLikeIosBareTimelineArray(rawData)){
     const normalized=normalizeIosBareArray(rawData);
-    const parsed=parseTimeline(normalized);
+    const parsed=markTimelineInputFormat(parseTimeline(normalized),"ios-bare-array");
     return {
       ...parsed,
       sourceFormat:"iPhone / iPad bare-array",
@@ -3285,56 +3301,176 @@ function animationSegmentKey(feature){
   return `${family}:${p.segment_no ?? ""}`;
 }
 
+function normalizeFlightActivityType(value){
+  return String(value||"")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s\-\/]+/g,"_");
+}
+
+function isExplicitFlightActivityType(value){
+  const t=normalizeFlightActivityType(value);
+  if(!t) return false;
+  if(["FLYING","FLIGHT","AIRPLANE","AIR_TRAVEL","AIRCRAFT","IN_AIRCRAFT","PLANE","IN_PLANE"].includes(t)) return true;
+  return /(^|_)(FLY|FLYING|FLIGHT|AIRPLANE|AIRCRAFT)(_|$)/.test(t);
+}
+
+function isIosTimelineFeature(feature){
+  return String((feature?.properties||{}).input_format||"")==="ios-bare-array";
+}
+
+function flightInferenceMetrics(fromCoord,toCoord,startTime,endTime){
+  if(!fromCoord || !toCoord) return null;
+  const km=haversineKm(fromCoord,toCoord);
+  const durationMs=Number(endTime)-Number(startTime);
+  if(!Number.isFinite(km) || !Number.isFinite(durationMs) || durationMs<=0) return null;
+  const hours=durationMs/3600000;
+  if(hours<=0 || hours>24) return null;
+  const avgKmh=km/hours;
+  const aTaiwan=isTaiwanCoordinate(Number(fromCoord[1]),Number(fromCoord[0]));
+  const bTaiwan=isTaiwanCoordinate(Number(toCoord[1]),Number(toCoord[0]));
+  return {km,hours,avgKmh,crossTaiwan:aTaiwan!==bTaiwan};
+}
+
+function looksLikeIosFlight(fromCoord,toCoord,startTime,endTime){
+  const m=flightInferenceMetrics(fromCoord,toCoord,startTime,endTime);
+  if(!m) return false;
+
+  // iOS 匯出常沒有 Android 的明確 FLYING 標籤，因此只在「iOS bare-array」啟用保守推定：
+  // 1) 臺灣 <-> 國外：至少 220 km，平均位移速度至少 110 km/h。
+  // 2) 國外 <-> 國外或無法靠臺灣邊界判斷：至少 900 km，平均至少 150 km/h。
+  // 這可以抓到實際跨國飛行，又避免把臺灣高鐵／長途開車誤判成飛機。
+  if(m.crossTaiwan && m.km>=220 && m.avgKmh>=110) return true;
+  if(m.km>=900 && m.avgKmh>=150) return true;
+  return false;
+}
+
 function makeAnimationItems(features){
   const items=[];
   const sorted=[...features].sort((a,b)=>featureSortTime(a)-featureSortTime(b));
 
-  // 先把 FLYING 的 activity_start / activity_end 配成完整飛航段。
-  // 舊版資料常被 rawSignals / visit / timelinePath 穿插，不能再依賴「相鄰兩筆都是 FLYING」。
-  const flightMap=new Map();
+  // 先把完整 activity_start / activity_end 配成候選移動段。
+  // Android 保留原本明確 FLYING 邏輯；iOS 若沒有 FLYING，才以跨國距離＋時間做保守推定。
+  const movementMap=new Map();
   for(const f of sorted){
     const g=f.geometry||{};
     const p=f.properties||{};
-    if(g.type!=="Point" || String(p.activity_type||"").toUpperCase()!=="FLYING") continue;
+    if(g.type!=="Point") continue;
+    if(String(p.type||"")!=="activity_start" && String(p.type||"")!=="activity_end") continue;
     const c=g.coordinates||[];
     if(c.length<2) continue;
     const key=animationSegmentKey(f);
     if(!key) continue;
-    let plan=flightMap.get(key);
-    if(!plan){ plan={key,start:null,end:null,startFeature:null,endFeature:null,startTime:0,endTime:0}; flightMap.set(key,plan); }
+    let plan=movementMap.get(key);
+    if(!plan){
+      plan={key,start:null,end:null,startFeature:null,endFeature:null,startTime:0,endTime:0,activityType:"",inferred:false,inferenceSource:""};
+      movementMap.set(key,plan);
+    }
+    if(p.activity_type) plan.activityType=p.activity_type;
     if(String(p.type||"")==="activity_start"){
       plan.start=[+c[0],+c[1]];
       plan.startFeature=f;
-      plan.startTime=featureSortTime(f);
-    }else if(String(p.type||"")==="activity_end"){
+      plan.startTime=featureSortTime(f) || Date.parse(p.segment_start_time||p.start_time||"") || 0;
+    }else{
       plan.end=[+c[0],+c[1]];
       plan.endFeature=f;
-      plan.endTime=featureSortTime(f);
+      plan.endTime=featureSortTime(f) || Date.parse(p.segment_end_time||p.end_time||"") || 0;
     }
   }
 
   const flights=[];
-  for(const plan of flightMap.values()){
-    if(!plan.start || !plan.end) continue;
-    if(!Number.isFinite(plan.startTime)) continue;
+  const flightKeys=new Set();
+  const pushFlightPlan=(plan)=>{
+    if(!plan || !plan.start || !plan.end) return false;
+    if(!Number.isFinite(plan.startTime) || !plan.startTime) return false;
     if(!Number.isFinite(plan.endTime) || plan.endTime<=plan.startTime){
       const p=(plan.startFeature&&plan.startFeature.properties)||{};
-      const t=Date.parse(p.end_time||"");
+      const t=Date.parse(p.segment_end_time||p.end_time||"");
       plan.endTime=Number.isFinite(t)&&t>plan.startTime?t:plan.startTime+60*60*1000;
     }
+    // 避免同一時段／近似端點重複建立飛航。
+    const duplicate=flights.some(x=>
+      Math.abs(x.startTime-plan.startTime)<120000 &&
+      Math.abs(x.endTime-plan.endTime)<120000 &&
+      coordNear(x.start,plan.start,12) && coordNear(x.end,plan.end,12)
+    );
+    if(duplicate) return false;
     flights.push(plan);
+    if(plan.key) flightKeys.add(plan.key);
+    return true;
+  };
+
+  for(const plan of movementMap.values()){
+    if(!plan.start || !plan.end) continue;
+    const explicit=isExplicitFlightActivityType(plan.activityType);
+    const iosFallback=Boolean(
+      !explicit &&
+      (isIosTimelineFeature(plan.startFeature) || isIosTimelineFeature(plan.endFeature)) &&
+      looksLikeIosFlight(plan.start,plan.end,plan.startTime,plan.endTime)
+    );
+    if(!explicit && !iosFallback) continue;
+    plan.inferred=iosFallback;
+    plan.inferenceSource=explicit?"activity-type":"ios-activity-distance-time";
+    pushFlightPlan(plan);
   }
+
+  // iOS 第二層 fallback：有些匯出只有 timelinePath，沒有可配對的 activity_start/end。
+  // 若一整條 iOS 路線本身已是跨國高速長距離，就把該 route 視為飛航，而不是普通直線。
+  for(const f of sorted){
+    if(!isIosTimelineFeature(f)) continue;
+    const g=f.geometry||{};
+    const p=f.properties||{};
+    if(g.type!=="LineString") continue;
+    const coords=(g.coordinates||[]).filter(c=>c&&c.length>=2);
+    if(coords.length<2) continue;
+    const st=featureSortTime(f);
+    const et=Date.parse(p.end_time||"");
+    if(!Number.isFinite(st) || !st || !Number.isFinite(et) || et<=st) continue;
+    const from=[Number(coords[0][0]),Number(coords[0][1])];
+    const to=[Number(coords[coords.length-1][0]),Number(coords[coords.length-1][1])];
+    if(!looksLikeIosFlight(from,to,st,et) && !isExplicitFlightActivityType(p.activity_type)) continue;
+    pushFlightPlan({
+      key:`ios-route:${p.segment_no??""}:${st}`,
+      start:from,end:to,startFeature:f,endFeature:f,startTime:st,endTime:et,
+      activityType:p.activity_type||"",inferred:!isExplicitFlightActivityType(p.activity_type),
+      inferenceSource:isExplicitFlightActivityType(p.activity_type)?"route-activity-type":"ios-route-distance-time"
+    });
+  }
+
+  // iOS 第三層 fallback：若飛行段完全沒有 activity / route，只剩出發地與抵達地兩個時間點，
+  // 以「相鄰非 Raw 錨點」的跨國距離＋時間推定。這正是 iOS 常見只剩一條跨國補線的情況。
+  const iosAnchors=sorted.filter(f=>{
+    if(!isIosTimelineFeature(f)) return false;
+    const g=f.geometry||{}, p=f.properties||{};
+    return g.type==="Point" && String(p.type||"")!=="raw_signal" && featureSortTime(f)>0;
+  });
+  for(let i=1;i<iosAnchors.length;i++){
+    const a=iosAnchors[i-1], b=iosAnchors[i];
+    const ac=a.geometry.coordinates||[], bc=b.geometry.coordinates||[];
+    if(ac.length<2 || bc.length<2) continue;
+    const st=featureSortTime(a), et=featureSortTime(b);
+    if(et<=st) continue;
+    const from=[Number(ac[0]),Number(ac[1])], to=[Number(bc[0]),Number(bc[1])];
+    if(!looksLikeIosFlight(from,to,st,et)) continue;
+    // 已有明確/推定飛航涵蓋這個時間窗就不重複。
+    if(flights.some(x=>st>=x.startTime-5*60000 && et<=x.endTime+5*60000)) continue;
+    pushFlightPlan({
+      key:`ios-gap:${st}:${et}`,
+      start:from,end:to,startFeature:a,endFeature:b,startTime:st,endTime:et,
+      activityType:"",inferred:true,inferenceSource:"ios-gap-distance-time"
+    });
+  }
+
   flights.sort((a,b)=>a.startTime-b.startTime);
 
-  // 一個 FLYING 活動只生成「一筆飛航動畫」：起點 -> 拋物線 -> 終點。
-  // 同一飛行時間窗內的 rawSignals / 單點 timelinePath 不再插進來破壞弧線。
-  // 飛航時間窗前後各保留 60 秒緩衝，避免同一趟 FLYING 的端點 route/rawSignal
-  // 又被當成一般路線畫一次，造成「拋物線 + 起終點直線」的雙重路徑。
+  // 一個飛航活動只生成「一筆飛航動畫」：起點 -> 拋物線 -> 終點。
+  // 同一飛行時間窗內的 rawSignals / timelinePath 不再插進來破壞弧線。
   const inFlightWindow=(time)=>flights.some(f=>time>=f.startTime-60000 && time<=f.endTime+60000);
   const isFlightEndpoint=(f)=>{
     const p=f.properties||{};
-    return String(p.activity_type||"").toUpperCase()==="FLYING" &&
-      (String(p.type||"")==="activity_start" || String(p.type||"")==="activity_end");
+    const type=String(p.type||"");
+    if(type!=="activity_start" && type!=="activity_end") return false;
+    return flightKeys.has(animationSegmentKey(f)) || isExplicitFlightActivityType(p.activity_type);
   };
 
   for(const f of sorted){
@@ -3374,7 +3510,9 @@ function makeAnimationItems(features){
       time:f.startTime,
       endTime:f.endTime,
       date:featureDate(f.startFeature),
-      flightKey:f.key
+      flightKey:f.key,
+      inferredFlight:Boolean(f.inferred),
+      flightInferenceSource:f.inferenceSource||""
     });
   }
 
@@ -3601,9 +3739,9 @@ function isFlightTransition(previousItem,item){
   if(!previousItem || !item) return false;
   const a=previousItem.feature ? (previousItem.feature.properties||{}) : {};
   const b=item.feature ? (item.feature.properties||{}) : {};
-  const aType=String(a.activity_type||"").toUpperCase();
-  const bType=String(b.activity_type||"").toUpperCase();
-  if(aType!=="FLYING" || bType!=="FLYING") return false;
+  const aType=a.activity_type||"";
+  const bType=b.activity_type||"";
+  if(!isExplicitFlightActivityType(aType) || !isExplicitFlightActivityType(bType)) return false;
   return animationSegmentKey(previousItem.feature)===animationSegmentKey(item.feature);
 }
 
@@ -5157,12 +5295,15 @@ fileInput.addEventListener("change",async e=>{
 
     const first=dataDates[0];
     const last=dataDates[dataDates.length-1];
+    const recognizedFlights=cachedAllAnimationItems.filter(x=>x&&x.kind==="flight");
+    const inferredFlights=recognizedFlights.filter(x=>x.inferredFlight);
 
     fileInfo.innerHTML=
       `<b>${escapeHtml(file.name)}</b><br>`+
       `${timelineDiagnosticHtml(parsed)}<br>`+
       `解析格式：${parsed.formats.map(escapeHtml).join(", ")}<br>`+
       `資料日期：${first} ～ ${last}（${dataDates.length.toLocaleString()} 天）<br>`+
+      `飛航辨識：${recognizedFlights.length.toLocaleString()} 段${inferredFlights.length?`（iOS 推定 ${inferredFlights.length.toLocaleString()} 段）`:""}<br>`+
       `特徵數：${allFeatures.length.toLocaleString()}`;
 
     let targetDate=last;
