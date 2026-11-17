@@ -2,7 +2,7 @@
 <html lang="zh-Hant-TW">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="dark"><title>ROM Patch Studio V2.1.4｜ROM ISO 補丁與全球使用計數</title>
+<meta name="color-scheme" content="dark"><title>ROM Patch Studio V2.1.5｜ROM ISO 補丁與全球使用計數</title>
 <style>
 :root{color-scheme:dark;--bg:#0b1120;--panel:#151f32;--panel2:#1a2a42;--line:#33445e;--txt:#eff5ff;--muted:#b2c1d5;--blue:#a8cdff;--good:#8fe8be;--warn:#ffd58b;--bad:#ffb2b2}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse 75% 20% at 50% -3%,#2b4773,transparent 85%),var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'Microsoft JhengHei','Noto Sans TC',sans-serif;line-height:1.55}
@@ -10,8 +10,16 @@ button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.46;curs
 .wrap{max-width:1120px;margin:auto;padding-left:22px;padding-right:22px}header{padding-top:39px;padding-bottom:20px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap}.brand{display:flex;gap:14px;align-items:center}.logo{width:54px;height:54px;border-radius:15px;background:linear-gradient(140deg,#254a75,#172a46);border:1px solid #6287b8;display:grid;place-items:center;font-size:27px;color:#c3dfff}h1{font-size:clamp(24px,4vw,33px);line-height:1.14;margin:0;letter-spacing:.2px}.sub{font-size:13px;color:var(--muted);margin:7px 0 0}.pill{border-radius:999px;background:#14332d;border:1px solid #327c5f;color:#a8f0cf;font-size:12px;font-weight:800;padding:9px 13px}.lead{font-size:14px;color:#c7d5e8;margin:24px 0 15px;max-width:940px}
 .format-list{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 15px}.format-list b,.format-list span{background:#20304a;border:1px solid #405471;font-size:12px;padding:6px 10px;border-radius:7px;color:#cbdfff}.format-list .partial{background:#4a331b;color:#ffe0a4;border-color:#795b2d}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel{border:1px solid var(--line);border-radius:18px;background:var(--panel);padding:22px;min-width:0}.panel+.panel{}.panelhead{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:16px}h2{font-size:17px;font-weight:780;margin:0;line-height:1.35}.tag{display:inline-block;padding:3px 8px;background:#23344c;color:#bfd0e8;border:1px solid #3c5070;border-radius:6px;font-size:11px;white-space:nowrap}.drop{border:2px dashed #4e6686;border-radius:14px;background:linear-gradient(145deg,#22344e,#1b293e);min-height:187px;padding:20px 12px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;text-align:center;transition:.15s;cursor:pointer}.drop:hover,.drop.over{border-color:#a2caff;background:#294567;transform:translateY(-1px)}.drop .glyph{font-size:33px;color:#a4cdfc;font-weight:400}.drop strong{font-size:15px}.drop .hint{font-size:12px;color:var(--muted)}.drop .pick{border-radius:8px;background:#284e77;color:#cce5ff;padding:6px 15px;font-weight:700;font-size:13px;margin-top:4px}
-.filebox{display:none;margin-top:13px;background:#0d1828;border:1px solid #354965;border-radius:10px;padding:12px;gap:10px;align-items:flex-start}.filebox.show{display:flex}.filemeta{flex:1;min-width:0}.filename{font-weight:700;overflow-wrap:anywhere;font-size:13px}.filedetail{color:#aec2dd;overflow-wrap:anywhere;font-size:12px;margin-top:4px}.mini{font-size:12px;background:#2b3b52;border:1px solid #536780;color:#dfedff;padding:4px 9px;border-radius:7px;flex:0 0 auto}.section{margin-top:18px}.details-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-top:18px}.info{border-radius:11px;border:1px solid #344862;background:#0e1a2c;min-width:0;padding:12px 13px;overflow-wrap:anywhere}.info.wide{grid-column:span 2}.label{font-size:11px;color:#a4b6d0;margin-bottom:6px}.value{font-size:13px;font-weight:720}.value.mono{font-family:Consolas,'Courier New',monospace;font-size:17px;color:#bcd7ff;letter-spacing:.035em}.help{color:#b7c7dc;font-size:12px;margin:10px 0 0}.empty{color:#b7c7dc;text-align:center;padding:25px 10px 8px;font-size:14px}.notice{padding:13px 14px;border-radius:10px;margin-top:15px;border:1px solid #45617e;background:#1b2e4a;color:#d7e6ff;display:flex;gap:11px;font-size:13px}.notice.good{background:#13352d;color:#b2f1d5;border-color:#357e62}.notice.warn{background:#3d2e1a;border-color:#846338;color:#ffe2ac}.notice.bad{background:#402128;border-color:#915159;color:#ffcccc}.notice .symbol{font-size:17px;font-weight:850}.status{font-size:12px;color:#b9c9e1;max-width:390px;margin:8px 0 0}
-.option-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px;align-items:start}.row-input label{display:block;font-size:12px;font-weight:700;color:#d1dff0;margin-bottom:6px}.row-input input{width:100%;background:#0e1a2a;color:var(--txt);border:1px solid #526984;padding:11px 13px;border-radius:9px;font-size:13px}.option-footer{margin:15px 0 14px;display:flex;flex-wrap:wrap;gap:12px 22px}.option-footer label{font-size:12px;color:#d2dfee;display:flex;align-items:flex-start;gap:9px;cursor:pointer;max-width:100%}.option-footer input{accent-color:#99c8ff;width:16px;height:16px;flex:0 0 auto}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{border-radius:11px;font-weight:800;min-height:48px;padding:11px 21px;font-size:14px}.mainbtn{flex:2 1 255px;background:#a8cdff;border:1px solid #d2e7ff;color:#10233b}.mainbtn:not(:disabled):hover{background:#c0dcff}.dl{flex:1 1 200px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:#adf0ca;background:#164737;border:1px solid #449977}.dl[aria-disabled="true"]{opacity:.43;pointer-events:none}.outline{background:#203450;border:1px solid #52749c;color:#deedff;padding:9px 14px;font-size:12px}
+.legacy-pick{text-align:right;margin-top:7px}.legacy-pick .mini{font-size:10px;opacity:.66;padding:2px 7px}.filebox{display:none;margin-top:13px;background:#0d1828;border:1px solid #354965;border-radius:10px;padding:12px;gap:10px;align-items:flex-start}.filebox.show{display:flex}.filemeta{flex:1;min-width:0}.filename{font-weight:700;overflow-wrap:anywhere;font-size:13px}.filedetail{color:#aec2dd;overflow-wrap:anywhere;font-size:12px;margin-top:4px}.mini{font-size:12px;background:#2b3b52;border:1px solid #536780;color:#dfedff;padding:4px 9px;border-radius:7px;flex:0 0 auto}.section{margin-top:18px}.details-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-top:18px}.info{border-radius:11px;border:1px solid #344862;background:#0e1a2c;min-width:0;padding:12px 13px;overflow-wrap:anywhere}.info.wide{grid-column:span 2}.label{font-size:11px;color:#a4b6d0;margin-bottom:6px}.value{font-size:13px;font-weight:720}.value.mono{font-family:Consolas,'Courier New',monospace;font-size:17px;color:#bcd7ff;letter-spacing:.035em}.help{color:#b7c7dc;font-size:12px;margin:10px 0 0}.empty{color:#b7c7dc;text-align:center;padding:25px 10px 8px;font-size:14px}.notice{padding:13px 14px;border-radius:10px;margin-top:15px;border:1px solid #45617e;background:#1b2e4a;color:#d7e6ff;display:flex;gap:11px;font-size:13px}.notice.good{background:#13352d;color:#b2f1d5;border-color:#357e62}.notice.warn{background:#3d2e1a;border-color:#846338;color:#ffe2ac}.notice.bad{background:#402128;border-color:#915159;color:#ffcccc}.notice .symbol{font-size:17px;font-weight:850}.status{font-size:12px;color:#b9c9e1;max-width:390px;margin:8px 0 0}
+.option-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px;align-items:start}.row-input label{display:block;font-size:12px;font-weight:700;color:#d1dff0;margin-bottom:6px}.row-input input{width:100%;background:#0e1a2a;color:var(--txt);border:1px solid #526984;padding:11px 13px;border-radius:9px;font-size:13px}.save-location{margin-top:13px;padding:12px 13px;border-radius:10px;border:1px solid #354b68;background:#102036}
+.save-location>label{display:block;color:#d8e7f8;font-size:12px;font-weight:750;margin-bottom:7px}
+.save-location-controls{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.save-location select{min-width:245px;flex:1 1 250px;min-height:39px;border:1px solid #526984;background:#0e1a2a;color:#e9f3ff;padding:6px 9px;border-radius:8px;font:inherit;font-size:12px}
+.save-location .save-picker{background:#233d5c;color:#e0f0ff;border:1px solid #4d729c;border-radius:8px;padding:8px 11px;font-size:12px;font-weight:700;min-height:39px}
+.save-location .save-picker[hidden]{display:none}
+.save-location .save-note{margin:7px 0 0;font-size:11px;line-height:1.45;color:#acbfd6}
+@media(max-width:440px){.save-location select{min-width:0;width:100%}.save-location-controls>*{flex:1 1 100%}}
+.option-footer{margin:15px 0 14px;display:flex;flex-wrap:wrap;gap:12px 22px}.option-footer label{font-size:12px;color:#d2dfee;display:flex;align-items:flex-start;gap:9px;cursor:pointer;max-width:100%}.option-footer input{accent-color:#99c8ff;width:16px;height:16px;flex:0 0 auto}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{border-radius:11px;font-weight:800;min-height:48px;padding:11px 21px;font-size:14px}.mainbtn{flex:2 1 255px;background:#a8cdff;border:1px solid #d2e7ff;color:#10233b}.mainbtn:not(:disabled):hover{background:#c0dcff}.dl{flex:1 1 200px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:#adf0ca;background:#164737;border:1px solid #449977}.dl[aria-disabled="true"]{opacity:.43;pointer-events:none}.outline{background:#203450;border:1px solid #52749c;color:#deedff;padding:9px 14px;font-size:12px}
 .progress{display:none;margin-top:16px;padding:13px;border:1px solid #3b5170;border-radius:10px;background:#152942}.progress.show{display:block}.progline{display:flex;justify-content:space-between;gap:10px;color:#cddff5;font-size:12px}.track{height:8px;border-radius:12px;background:#293d59;overflow:hidden;margin-top:9px}.bar{height:100%;width:0;background:linear-gradient(90deg,#65a2f8,#8fe4c5);transition:width .1s}.result{display:none;margin-top:14px;border-radius:10px;padding:13px 15px;background:#153a2d;border:1px solid #36805c}.result.show{display:block}.result strong{color:#a4f3d0}.result p{font-size:12px;color:#d1e6dd;margin:5px 0 0;overflow-wrap:anywhere}footer{text-align:center;padding:29px 20px 42px;font-size:12px;color:#a9beda}footer strong{color:#d0e7f6}details{background:#101d30;border:1px solid #324862;border-radius:12px;padding:12px 15px;margin-top:17px;color:#becfe5;font-size:12px}summary{font-size:13px;color:#e1ebf9;cursor:pointer;font-weight:750}details p{margin:9px 0 0}kbd{border:1px solid #516784;border-radius:4px;padding:1px 4px;background:#24324b;color:#e0ecff}
 /* Compact public counter in the last line of the footer; no card and no reserved panel space. */
 .usage-panel{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:2px 11px;margin:7px auto 0;padding:0;border:0;background:none;color:#8293aa;font-size:10px;font-weight:400;line-height:1.25;opacity:.72}
@@ -26,7 +34,7 @@ button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.46;curs
 </head>
 <body>
 <header class="wrap">
- <div class="hero"><div class="brand"><div class="logo" aria-hidden="true">▣</div><div><h1>ROM Patch Studio</h1><p class="sub">V2.1.4｜ROM · ISO · BIN 補丁工作站</p></div></div><div class="pill">● 檔案本機處理</div></div>
+ <div class="hero"><div class="brand"><div class="logo" aria-hidden="true">▣</div><div><h1>ROM Patch Studio</h1><p class="sub">V2.1.5｜ROM · ISO · BIN 補丁工作站</p></div></div><div class="pill">● 檔案本機處理</div></div>
  <p class="lead">載入原始遊戲檔與補丁，程式會讀取格式、檢查可取得的原始版本資訊，完成後另存新檔。支援拖曳、選檔及大型光碟映像檔的分段處理。ROM 與補丁完全在本機處理，只有匿名載入次數會連線同步。</p>
  <div class="format-list"><b>BPS</b><b>UPS</b><b>IPS</b><b>IPS32</b><b>PPF 1／2／3</b><span class="partial">XDELTA／VCDIFF（標準無次級壓縮）</span></div>
 </header>
@@ -34,7 +42,7 @@ button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.46;curs
  <div class="two">
   <section class="panel"><div class="panelhead"><h2>01｜原始 ROM／ISO／BIN</h2><span class="tag">點選或拖曳</span></div>
    <div class="drop" id="romDrop" role="button" tabindex="0"><span class="glyph" aria-hidden="true">⇧</span><strong>拖曳原始遊戲檔到這裡</strong><span class="hint">ROM、ISO、BIN、IMG 等未壓縮檔案</span><span class="pick">選擇遊戲檔案</span></div>
-   <input type="file" id="romInput" hidden><div class="filebox" id="romFileBox"><div class="filemeta"><div class="filename" id="romFileName"></div><div class="filedetail" id="romFileDetails"></div></div><button type="button" class="mini" id="removeRom">移除</button></div>
+   <input type="file" id="romInput" hidden><div class="legacy-pick"><button type="button" class="mini" id="romLegacyPick">一般選檔（備用）</button></div><div class="filebox" id="romFileBox"><div class="filemeta"><div class="filename" id="romFileName"></div><div class="filedetail" id="romFileDetails"></div></div><button type="button" class="mini" id="removeRom">移除</button></div>
   </section>
   <section class="panel"><div class="panelhead"><h2>02｜補丁檔案</h2><span class="tag">自動辨識格式</span></div>
    <div class="drop" id="patchDrop" role="button" tabindex="0"><span class="glyph" aria-hidden="true">⇧</span><strong>拖曳補丁到這裡</strong><span class="hint">BPS、UPS、IPS、IPS32、PPF、XDELTA</span><span class="pick">選擇補丁檔案</span></div>
@@ -62,25 +70,37 @@ button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.46;curs
     <div class="row-input"><label for="outputName">輸出檔名</label><input id="outputName" spellcheck="false" autocomplete="off" placeholder="依原始檔自動產生" maxlength="240"></div>
     <div class="row-input"><label for="manualCrc">補丁說明指定的原始 CRC32（選填）</label><input id="manualCrc" inputmode="text" spellcheck="false" maxlength="18" placeholder="例如 BA595897（僅無內建 CRC 的格式）"></div>
   </div>
+  <div class="save-location">
+    <label for="saveMode">輸出儲存目錄</label>
+    <div class="save-location-controls">
+      <select id="saveMode" aria-label="輸出儲存目錄">
+        <option value="source" selected>原始 ROM 同目錄（預設）</option>
+        <option value="custom">自選其他資料夾</option>
+      </select>
+      <button type="button" id="chooseSaveFolder" class="save-picker" hidden>選擇輸出資料夾</button>
+    </div>
+    <p class="save-note" id="saveLocationStatus" role="status">選擇原始 ROM 後，另存視窗會預設開啟其所在資料夾。</p>
+  </div>
   <div class="option-footer">
    <label id="riskLabel"><input id="ackRisk" type="checkbox">我已確認無 CRC32 驗證補丁所需的原始版本與映像檔型態</label>
    <label id="undoLabel" hidden><input id="undoPpf" type="checkbox">PPF3：使用 Undo 資料還原</label>
-   <label><input id="directSave" type="checkbox">強制使用「直接另存」方式（適用大型 ISO／BIN，Chrome／Edge）</label>
+   <label><input id="directSave" type="checkbox" checked>使用系統「另存新檔」視窗（預設；Chrome／Edge，可選擇位置）</label>
   </div>
-  <div class="actions"><button class="btn mainbtn" id="applyBtn" type="button" disabled>開始套用補丁</button><a class="btn dl" id="downloadBtn" role="button" aria-disabled="true" tabindex="-1">下載另存新的 ROM／ISO</a><button class="btn outline" id="hashBtn" type="button" disabled>計算原始 CRC32</button></div>
+  <div class="actions"><button class="btn mainbtn" id="applyBtn" type="button" disabled>開始套用補丁</button><a class="btn dl" id="downloadBtn" role="button" aria-disabled="true" tabindex="-1" hidden>下載完成的 ROM／ISO（瀏覽器下載）</a><button class="btn outline" id="hashBtn" type="button" disabled>計算原始 CRC32</button></div>
   <div class="progress" id="progress"><div class="progline"><span id="progressText">準備中</span><span id="progressPct">0%</span></div><div class="track"><div class="bar" id="progressBar"></div></div></div>
   <div class="result" id="result"><strong id="resultTitle">補丁套用完成</strong><p id="resultDetails"></p></div>
-  <p class="help" id="saveHint">檔案較小時產生瀏覽器下載；大型 ISO／BIN 會改以 Chrome／Edge 的檔案儲存視窗直接分段寫入，不必把整份映像檔載入記憶體。</p>
+  <p class="help" id="saveHint">Chrome／Edge 會在套用前開啟另存視窗，預設來源 ROM 資料夾，也可選其他資料夾；原始檔不會被覆寫。</p>
  </section>
  <details><summary>支援限制、光碟注意事項與隱私說明</summary>
    <p><strong>主機：</strong>不依主機名稱限制，FC、SFC、GB、GBA、MD、N64、NDS 等一般 ROM，及 PS1、PS2、PSP、Saturn、Dreamcast、GameCube、Wii 等未壓縮 ISO／BIN 均可依相符補丁嘗試；可套用不等於可以修復壓縮或特殊封裝。</p>
    <p><strong>格式：</strong>BPS、UPS 會驗證補丁及輸出 CRC32；PPF2／PPF3 可依原始區塊驗證；IPS／IPS32／PPF1 無內建原始 CRC32，請搭配補丁發布者指定版本。BPS 目標需暫存（上限 512 MiB）。VCDIFF 小型檔案可在記憶體模式下載，大型檔案可分段直存，但直存模式尚未支援 VCD_TARGET 跨視窗回讀。XDELTA 目前支援採標準碼表、未採用次級壓縮的 VCDIFF；含 LZMA/DJW/自訂碼表的版本會明確拒絕，不會假裝成功。</p>
+   <p><strong>儲存目錄：</strong>Chrome／Edge 使用原生檔案選擇器載入 ROM 後，可把原檔所在資料夾作為另存視窗的起始位置；使用拖曳時會嘗試取得位置，若瀏覽器未提供檔案控制代碼，請改用選檔或自選輸出資料夾。瀏覽器基於安全性不提供完整磁碟路徑，且儲存前必須由使用者確認；其他瀏覽器可能只能使用預設下載資料夾。</p>
    <p><strong>大型檔案：</strong>IPS、IPS32、PPF、UPS 以及支援的 XDELTA 可分段處理，需 Chrome／Edge 提供 File System Access API；是否可完成仍取決於可用磁碟空間、瀏覽器與檔案實際結構。IPS 只能寫入前 16 MiB，IPS32 最高使用 32-bit 偏移；PPF3 支援 64-bit 偏移但受瀏覽器安全整數限制。</p>
    <p><strong>光碟：</strong>CUE 是索引，請對補丁指定的 BIN/ISO 操作。多音軌或多檔 BIN 不會自動整合；套用後保留原有 CUE 並確認檔名對應。CHD、CSO、RVZ、GCZ 等壓縮映像須先解壓還原，程式不會把它們冒充原始 ISO。</p>
    <p><strong>隱私：</strong>這份 HTML 的補丁處理 CSS、JavaScript 及工作執行緒完全內嵌。ROM、ISO、BIN、補丁內容與檔名都只留在本機；只在設定 Google Apps Script 計數服務後，傳送「ROM 或補丁」的匿名載入事件與隨機去重 ID，不傳送任何檔案資料。無網路仍可打補丁；計數會留在本機佇列，恢復連線後嘗試同步。</p>
  </details>
 </main>
-<footer class="wrap">ROM Patch Studio V2.1.4 · 繁體中文（臺灣） · <strong>檔案本機處理／全球共用匿名載入計數</strong><br>請使用自己合法取得的遊戲檔與補丁。大型檔案儲存請使用最新版 Chrome 或 Edge。
+<footer class="wrap">ROM Patch Studio V2.1.5 · 繁體中文（臺灣） · <strong>檔案本機處理／全球共用匿名載入計數</strong><br>請使用自己合法取得的遊戲檔與補丁。大型檔案儲存請使用最新版 Chrome 或 Edge。
  <div class="usage-panel" aria-label="全球共用檔案載入統計（臺灣時間）" title="每次選取或拖入 ROM 或補丁時記錄一次，資料只包含類型與匿名事件編號，不上傳任何檔案資訊。">
   <span class="usage-label">全球計次</span>
   <span>今日 <b id="todayLoadCount">—</b></span>
@@ -456,7 +476,7 @@ self.onmessage=async ({data:m})=>{
 
 </script>
 <script>
-// ROM Patch Studio V2.1.4 - global Google Sheets load counter.
+// ROM Patch Studio V2.1.5 - global Google Sheets load counter.
 // Configured Google Apps Script deployment URL; keep unchanged when updating the UI.
 // This is intentionally independent of the Google Timeline site's counters.
 (() => {
@@ -668,7 +688,7 @@ self.onmessage=async ({data:m})=>{
     '630F07C6':{name:'Honoo no Toukyuuji - Dodge Danpei (Japan)',platform:'SEGA Mega Drive / Genesis',hint:'No-Intro CRC32 比對'},
     'BA595897':{name:'Honoo no Toukyuuji - Dodge Danpei (Japan)',platform:'Nintendo Game Boy',hint:'No-Intro CRC32 比對'}
   };
-  const state={rom:null,patch:null,romInfo:null,patchInfo:null,validation:null,romError:null,patchError:null,busy:false,pending:{rom:'',patch:'',verify:'',hash:'',apply:''},seq:0,url:null,lastSuggested:''};
+  const state={rom:null,patch:null,romInfo:null,patchInfo:null,validation:null,romError:null,patchError:null,busy:false,pending:{rom:'',patch:'',verify:'',hash:'',apply:''},seq:0,url:null,lastSuggested:'',romHandle:null,saveDirHandle:null};
   let worker,workerUrl;
   try{workerUrl=URL.createObjectURL(new Blob([$('worker-source').textContent],{type:'text/javascript'}));worker=new Worker(workerUrl);}
   catch(e){setMessage('bad','此瀏覽器無法啟動本機工作執行緒。請使用最新版 Chrome／Edge，直接開啟 HTML。');return;}
@@ -683,28 +703,98 @@ self.onmessage=async ({data:m})=>{
   function setSuggested(force=true){let n=suggestedName(),field=$('outputName');if(force||!field.value||field.value===state.lastSuggested)field.value=n;state.lastSuggested=n;$('downloadBtn').download=currentName();}
   function setMessage(kind,message){const box=$('notice');box.className='notice '+(kind||'');$('noticeSymbol').textContent=kind==='good'?'✓':kind==='bad'?'✕':kind==='warn'?'!':'i';$('noticeText').textContent=message;}
   function progress(message,percent=0){$('progress').classList.add('show');$('progressText').textContent=message;$('progressPct').textContent=percent+'%';$('progressBar').style.width=percent+'%';}
-  function clearResult(){if(state.url)URL.revokeObjectURL(state.url);state.url=null;let a=$('downloadBtn');a.removeAttribute('href');a.setAttribute('aria-disabled','true');a.tabIndex=-1;$('result').classList.remove('show');$('progress').classList.remove('show');}
+  function clearResult(){if(state.url)URL.revokeObjectURL(state.url);state.url=null;let a=$('downloadBtn');a.removeAttribute('href');a.setAttribute('aria-disabled','true');a.tabIndex=-1;a.hidden=true;$('result').classList.remove('show');$('progress').classList.remove('show');}
   function displayFile(kind){const f=state[kind],box=$(kind+'FileBox');box.classList.toggle('show',!!f);if(!f)return;$(kind+'FileName').textContent=f.name;$(kind+'FileDetails').textContent=sizes(f.size)+' · 正在讀取…';}
-  function setFile(kind,file){if(!file||state.busy)return;state[kind]=file;state[kind+'Info']=null;state[kind+'Error']=null;state.validation=null;state.pending.verify='';state.pending[kind]=kind+'-'+(++state.seq);
+  function setFile(kind,file,handle=null){if(!file||state.busy)return;
+    state[kind]=file;
+    if(kind==='rom')state.romHandle=handle?.kind==='file'?handle:null;
+    state[kind+'Info']=null;state[kind+'Error']=null;state.validation=null;state.pending.verify='';state.pending[kind]=kind+'-'+(++state.seq);
     clearResult();displayFile(kind);setSuggested(false);render();
-    // Count exactly one accepted file selection/drop; never send its contents or metadata.
+    // A single accepted file selection counts once; no filename, path, or file content is sent.
     window.romPatchCounter?.recordFileLoad(kind);
     worker.postMessage({kind:kind==='rom'?'inspectRom':'inspectPatch',job:state.pending[kind],file});
   }
-  function clearFile(kind){if(state.busy)return;state[kind]=null;state[kind+'Info']=null;state[kind+'Error']=null;state.pending[kind]='';state.pending.verify='';state.validation=null;$(kind+'Input').value='';clearResult();displayFile(kind);setSuggested(true);render();}
-  function bindDrop(kind){const zone=$(kind+'Drop'),input=$(kind+'Input');const choose=()=>{if(state.busy)return;input.value='';input.click();};zone.addEventListener('click',choose);zone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose();}});
-    input.addEventListener('change',()=>setFile(kind,input.files?.[0]));let enters=0;
-    zone.addEventListener('dragenter',e=>{e.preventDefault();enters++;zone.classList.add('over');});zone.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';zone.classList.add('over');});
+  function clearFile(kind){if(state.busy)return;
+    state[kind]=null;if(kind==='rom')state.romHandle=null;
+    state[kind+'Info']=null;state[kind+'Error']=null;state.pending[kind]='';state.pending.verify='';state.validation=null;
+    $(kind+'Input').value='';clearResult();displayFile(kind);setSuggested(true);render();}
+  function bindDrop(kind){
+    const zone=$(kind+'Drop'),input=$(kind+'Input');
+    // For ROM files the native picker provides a FileSystemFileHandle. Passing it as
+    // showSaveFilePicker.startIn opens the save dialog in the source file's directory.
+    const choose=async()=>{
+      if(state.busy)return;
+      if(kind==='rom' && typeof window.showOpenFilePicker==='function'){
+        try{
+          const [handle]=await window.showOpenFilePicker({id:'rom-patch-source-open',multiple:false});
+          if(handle?.kind!=='file')return;
+          const file=await handle.getFile();
+          setFile(kind,file,handle);
+        }catch(err){
+          if(err?.name==='AbortError')return;
+          setMessage('warn','原生選檔視窗無法使用：'+(err?.message||'不明錯誤')+'。可改用下方的一般選檔，或拖曳檔案。');
+        }
+      }else{input.value='';input.click();}
+    };
+    zone.addEventListener('click',choose);
+    zone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose();}});
+    input.addEventListener('change',()=>setFile(kind,input.files?.[0]));
+    let enters=0;
+    zone.addEventListener('dragenter',e=>{e.preventDefault();enters++;zone.classList.add('over');});
+    zone.addEventListener('dragover',e=>{e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='copy';zone.classList.add('over');});
     zone.addEventListener('dragleave',e=>{e.preventDefault();enters=Math.max(0,enters-1);if(!enters)zone.classList.remove('over');});
-    zone.addEventListener('drop',e=>{e.preventDefault();enters=0;zone.classList.remove('over');if(e.dataTransfer?.files?.[0])setFile(kind,e.dataTransfer.files[0]);});
+    zone.addEventListener('drop',async e=>{
+      e.preventDefault();enters=0;zone.classList.remove('over');
+      if(state.busy)return;
+      const f=e.dataTransfer?.files?.[0];if(!f)return;
+      let pendingHandle=null;
+      // This API must be called synchronously within the drop event, before awaiting.
+      if(kind==='rom'){
+        try{const item=e.dataTransfer?.items?.[0];if(item?.getAsFileSystemHandle)pendingHandle=item.getAsFileSystemHandle();}
+        catch(_e){}
+      }
+      let handle=null;
+      if(pendingHandle){try{handle=await pendingHandle;}catch(_e){}}
+      setFile(kind,f,handle);
+    });
   }
-  bindDrop('rom');bindDrop('patch');document.addEventListener('dragover',e=>e.preventDefault());document.addEventListener('drop',e=>e.preventDefault());
+  bindDrop('rom');bindDrop('patch');
+  document.addEventListener('dragover',e=>e.preventDefault());
+  document.addEventListener('drop',e=>e.preventDefault());
+  // Explicit fallback for environments without the native File System Access API.
+  $('romLegacyPick').addEventListener('click',()=>{if(state.busy)return;const el=$('romInput');el.value='';el.click();});
   $('removeRom').addEventListener('click',()=>clearFile('rom'));$('removePatch').addEventListener('click',()=>clearFile('patch'));
   $('outputName').addEventListener('input',()=>{$('downloadBtn').download=currentName();render();});
   $('manualCrc').addEventListener('change',()=>{if(state.patchInfo?.validation==='crc32')return;state.validation=null;clearResult();requestValidation();});
   $('undoPpf').addEventListener('change',()=>{state.validation=null;clearResult();requestValidation();});
-  $('ackRisk').addEventListener('change',render);$('directSave').addEventListener('change',render);
-  function lock(on){state.busy=on;['romInput','patchInput','removeRom','removePatch','manualCrc','undoPpf','ackRisk','directSave'].forEach(id=>$(id).disabled=on);['romDrop','patchDrop'].forEach(id=>{$(id).style.pointerEvents=on?'none':'';$(id).setAttribute('aria-disabled',String(on));});$('hashBtn').disabled=on||!state.rom;$('applyBtn').textContent=on?'正在處理補丁…':'開始套用補丁';render();}
+  $('ackRisk').addEventListener('change',render);
+  $('directSave').addEventListener('change',()=>{clearResult();render();});
+  $('saveMode').addEventListener('change',()=>{render();});
+  $('chooseSaveFolder').addEventListener('click',async()=>{
+    if(state.busy||typeof window.showDirectoryPicker!=='function')return;
+    try{
+      const options={id:'rom-patch-custom-directory',mode:'readwrite'};
+      if(state.saveDirHandle||state.romHandle)options.startIn=state.saveDirHandle||state.romHandle;
+      state.saveDirHandle=await window.showDirectoryPicker(options);
+      $('saveMode').value='custom';render();
+    }catch(err){if(err?.name!=='AbortError')setMessage('warn','選擇目錄未完成：'+(err?.message||'請在另存視窗內直接選擇目的地。'));}
+  });
+  if(typeof window.showSaveFilePicker!=='function'){
+    $('directSave').checked=false;$('directSave').disabled=true;
+  }
+  function saveLocationHint(){
+    const custom=$('saveMode').value==='custom';
+    $('chooseSaveFolder').hidden=!custom;
+    $('chooseSaveFolder').disabled=state.busy||typeof window.showDirectoryPicker!=='function';
+    let msg;
+    if(typeof window.showSaveFilePicker!=='function')msg='此瀏覽器不支援直接選擇儲存目錄；小檔案會使用瀏覽器的預設下載位置。請改用桌面版 Chrome／Edge。';
+    else if(custom)msg=state.saveDirHandle?'已選擇「'+state.saveDirHandle.name+'」作為起始資料夾；最後仍可在另存視窗中改變位置。':'按「選擇輸出資料夾」設定位置，或於系統另存視窗自行選擇。';
+    else if(state.romHandle)msg='已取得原始 ROM 的檔案控制代碼：另存視窗將優先開啟 ROM 所在資料夾；仍可改選位置。';
+    else if(state.rom)msg='本次載入未取得原始資料夾權限（可能是拖曳或一般選檔）。請重新點選 ROM 載入區的「選擇遊戲檔案」，或改用「自選其他資料夾」。';
+    else msg='使用上方的「選擇遊戲檔案」開啟 ROM；另存視窗會優先顯示原始 ROM 所在資料夾。';
+    $('saveLocationStatus').textContent=msg;
+  }
+  function lock(on){state.busy=on;['romInput','patchInput','removeRom','removePatch','manualCrc','undoPpf','ackRisk','directSave','saveMode','chooseSaveFolder','romLegacyPick'].forEach(id=>$(id).disabled=on);['romDrop','patchDrop'].forEach(id=>{$(id).style.pointerEvents=on?'none':'';$(id).setAttribute('aria-disabled',String(on));});$('hashBtn').disabled=on||!state.rom;$('applyBtn').textContent=on?'正在處理補丁…':'開始套用補丁';render();}
   function requestValidation(){if(!state.romInfo||!state.patchInfo||!state.rom||!state.patch||state.romError||state.patchError||state.romInfo.blocked||state.patchInfo.blocked)return;
     state.validation=null;state.pending.verify='verify-'+(++state.seq);const manual=state.patchInfo.validation==='crc32'?'':$('manualCrc').value;
     worker.postMessage({kind:'validate',job:state.pending.verify,rom:state.rom,patch:state.patch,info:state.patchInfo,manualCrc:manual,undo:$('undoPpf').checked});render();
@@ -724,7 +814,7 @@ self.onmessage=async ({data:m})=>{
     if(shouldSaveDirectly(p,v)&&typeof window.showSaveFilePicker!=='function')return false;
     return true;
   }
-  function render(){const p=state.patchInfo,r=state.romInfo,v=state.validation;
+  function render(){saveLocationHint();const p=state.patchInfo,r=state.romInfo,v=state.validation;
     $('detailsGrid').hidden=!p;$('emptyInfo').hidden=!!p;$('formatTag').textContent=p?p.type:'尚未載入';
     $('undoLabel').hidden=!(p?.type==='PPF3'&&p.undo);
     $('manualCrc').disabled=state.busy||!p||p.validation==='crc32';
@@ -758,7 +848,7 @@ self.onmessage=async ({data:m})=>{
     if(!state.busy)setMessage(kind,message);
     $('applyBtn').disabled=!isReady();
     const direct=shouldSaveDirectly(p,v);
-    $('saveHint').textContent=direct?'這份檔案採「直接儲存」流程：按下開始後會開啟系統另存視窗，直接分段寫入新檔，不必將整份 ISO／BIN 載入記憶體。':'檔案會先在本機完成補丁，再點選「下載另存新的 ROM／ISO」儲存。原始檔不會被修改。';
+    $('saveHint').textContent=direct?'按下「開始套用補丁」時將先開啟系統另存視窗，確認儲存位置後開始處理。大型 ISO／BIN 仍採分段寫入；來源 ROM 絕不會被自動覆蓋。':'目前使用備用瀏覽器下載模式：完成後點選「下載完成的 ROM／ISO」，實際下載目錄由瀏覽器設定決定。';
   }
   worker.addEventListener('message',e=>{const m=e.data;
     if(m.kind==='progress'){const current=[state.pending.patch,state.pending.verify,state.pending.apply,state.pending.hash];if(!current.includes(m.job))return;progress(m.message,m.percent);return;}
@@ -767,7 +857,7 @@ self.onmessage=async ({data:m})=>{
     if(m.kind==='validation'){if(state.pending.verify!==m.job)return;state.validation=m.result;if(m.result.actualCrc!=null){state.romInfo.crc=m.result.actualCrc;$('romFileDetails').textContent=sizes(state.rom.size)+' · CRC32: '+hex(m.result.actualCrc)+' · '+state.romInfo.platform;}render();return;}
     if(m.kind==='romCrc'){if(state.pending.hash!==m.job)return;state.romInfo.crc=m.crc;$('romFileDetails').textContent=sizes(state.rom.size)+' · CRC32: '+hex(m.crc)+' · '+state.romInfo.platform;setMessage('good','原始檔 CRC32 計算完成：'+hex(m.crc)+'。');return;}
     if(m.kind==='applyResult'){if(state.pending.apply!==m.job)return;state.pending.apply='';lock(false);if(m.saved){$('resultTitle').textContent='✓ 補丁已直接另存至你選擇的本機位置';}
-      else{const blob=new Blob((m.buffers||[]).map(b=>new Uint8Array(b)),{type:'application/octet-stream'});state.url=URL.createObjectURL(blob);const a=$('downloadBtn');a.href=state.url;a.setAttribute('aria-disabled','false');a.tabIndex=0;a.download=currentName();$('resultTitle').textContent='✓ 補丁已完成，請點選下載另存新檔';}
+      else{const blob=new Blob((m.buffers||[]).map(b=>new Uint8Array(b)),{type:'application/octet-stream'});state.url=URL.createObjectURL(blob);const a=$('downloadBtn');a.href=state.url;a.setAttribute('aria-disabled','false');a.tabIndex=0;a.hidden=false;a.download=currentName();$('resultTitle').textContent='✓ 補丁已完成，請點選下載另存新檔';}
       $('result').classList.add('show');$('resultDetails').textContent='輸出大小：'+sizes(m.size)+(m.crc!=null?' ｜ CRC32：'+hex(m.crc):' ｜ 大型檔案未計算輸出 CRC32')+(m.headerRemoved?' ｜ 已移除 512 bytes 檔頭':'')+(m.direction==='reverse'?' ｜ UPS 反向還原':'')+(m.windows!=null?' ｜ 視窗數 '+m.windows:'');progress('處理完成',100);
       setMessage('good',m.saved?'補丁處理成功，新檔已儲存到你選擇的位置。':'補丁處理成功，可點選右方按鈕下載另存新檔。');return;
     }
@@ -789,8 +879,17 @@ self.onmessage=async ({data:m})=>{
     if(direct){if(typeof window.showSaveFilePicker!=='function'){setMessage('bad','大型檔案須使用支援檔案儲存 API 的 Chrome 或 Edge。');return;}
       try{
         const name=currentName();
-        handle=await window.showSaveFilePicker({suggestedName:name});
-        if(handle.name.toLowerCase()===state.rom.name.toLowerCase()){setMessage('bad','輸出檔案名稱與原始檔相同，已中止以避免覆蓋原始檔。');return;}
+        const mode=$('saveMode').value;
+        const startIn=mode==='custom'?state.saveDirHandle:state.romHandle;
+        const options={suggestedName:name,id:mode==='custom'?'rom-patch-save-custom':'rom-patch-save-source'};
+        if(startIn)options.startIn=startIn;
+        handle=await window.showSaveFilePicker(options);
+        if(handle.name.toLowerCase()===state.rom.name.toLowerCase()){
+          setMessage('bad','輸出檔名與原始 ROM 相同，已中止以免覆蓋原檔。');return;
+        }
+        if(state.romHandle && typeof handle.isSameEntry==='function' && await handle.isSameEntry(state.romHandle)){
+          setMessage('bad','選到了原始 ROM 檔案，已中止以免覆蓋來源。');return;
+        }
       }catch(e){if(e.name==='AbortError')return;setMessage('bad','無法開啟另存視窗：'+e.message+'。請使用最新版 Chrome／Edge。');return;}
     }
     clearResult();lock(true);state.pending.apply='apply-'+(++state.seq);progress('準備套用補丁',0);
