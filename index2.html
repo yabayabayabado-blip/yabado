@@ -1,0 +1,805 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark"><title>ROM Patch Studio V2.1.4｜ROM ISO 補丁與全球使用計數</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1120;--panel:#151f32;--panel2:#1a2a42;--line:#33445e;--txt:#eff5ff;--muted:#b2c1d5;--blue:#a8cdff;--good:#8fe8be;--warn:#ffd58b;--bad:#ffb2b2}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse 75% 20% at 50% -3%,#2b4773,transparent 85%),var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'Microsoft JhengHei','Noto Sans TC',sans-serif;line-height:1.55}
+button,input{font:inherit}button{cursor:pointer}button:disabled{opacity:.46;cursor:not-allowed}button:focus-visible,input:focus-visible,.drop:focus-visible,a:focus-visible{outline:3px solid #aacfff;outline-offset:3px}
+.wrap{max-width:1120px;margin:auto;padding-left:22px;padding-right:22px}header{padding-top:39px;padding-bottom:20px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:center;flex-wrap:wrap}.brand{display:flex;gap:14px;align-items:center}.logo{width:54px;height:54px;border-radius:15px;background:linear-gradient(140deg,#254a75,#172a46);border:1px solid #6287b8;display:grid;place-items:center;font-size:27px;color:#c3dfff}h1{font-size:clamp(24px,4vw,33px);line-height:1.14;margin:0;letter-spacing:.2px}.sub{font-size:13px;color:var(--muted);margin:7px 0 0}.pill{border-radius:999px;background:#14332d;border:1px solid #327c5f;color:#a8f0cf;font-size:12px;font-weight:800;padding:9px 13px}.lead{font-size:14px;color:#c7d5e8;margin:24px 0 15px;max-width:940px}
+.format-list{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 15px}.format-list b,.format-list span{background:#20304a;border:1px solid #405471;font-size:12px;padding:6px 10px;border-radius:7px;color:#cbdfff}.format-list .partial{background:#4a331b;color:#ffe0a4;border-color:#795b2d}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}.panel{border:1px solid var(--line);border-radius:18px;background:var(--panel);padding:22px;min-width:0}.panel+.panel{}.panelhead{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:16px}h2{font-size:17px;font-weight:780;margin:0;line-height:1.35}.tag{display:inline-block;padding:3px 8px;background:#23344c;color:#bfd0e8;border:1px solid #3c5070;border-radius:6px;font-size:11px;white-space:nowrap}.drop{border:2px dashed #4e6686;border-radius:14px;background:linear-gradient(145deg,#22344e,#1b293e);min-height:187px;padding:20px 12px;display:flex;align-items:center;justify-content:center;gap:8px;flex-direction:column;text-align:center;transition:.15s;cursor:pointer}.drop:hover,.drop.over{border-color:#a2caff;background:#294567;transform:translateY(-1px)}.drop .glyph{font-size:33px;color:#a4cdfc;font-weight:400}.drop strong{font-size:15px}.drop .hint{font-size:12px;color:var(--muted)}.drop .pick{border-radius:8px;background:#284e77;color:#cce5ff;padding:6px 15px;font-weight:700;font-size:13px;margin-top:4px}
+.filebox{display:none;margin-top:13px;background:#0d1828;border:1px solid #354965;border-radius:10px;padding:12px;gap:10px;align-items:flex-start}.filebox.show{display:flex}.filemeta{flex:1;min-width:0}.filename{font-weight:700;overflow-wrap:anywhere;font-size:13px}.filedetail{color:#aec2dd;overflow-wrap:anywhere;font-size:12px;margin-top:4px}.mini{font-size:12px;background:#2b3b52;border:1px solid #536780;color:#dfedff;padding:4px 9px;border-radius:7px;flex:0 0 auto}.section{margin-top:18px}.details-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-top:18px}.info{border-radius:11px;border:1px solid #344862;background:#0e1a2c;min-width:0;padding:12px 13px;overflow-wrap:anywhere}.info.wide{grid-column:span 2}.label{font-size:11px;color:#a4b6d0;margin-bottom:6px}.value{font-size:13px;font-weight:720}.value.mono{font-family:Consolas,'Courier New',monospace;font-size:17px;color:#bcd7ff;letter-spacing:.035em}.help{color:#b7c7dc;font-size:12px;margin:10px 0 0}.empty{color:#b7c7dc;text-align:center;padding:25px 10px 8px;font-size:14px}.notice{padding:13px 14px;border-radius:10px;margin-top:15px;border:1px solid #45617e;background:#1b2e4a;color:#d7e6ff;display:flex;gap:11px;font-size:13px}.notice.good{background:#13352d;color:#b2f1d5;border-color:#357e62}.notice.warn{background:#3d2e1a;border-color:#846338;color:#ffe2ac}.notice.bad{background:#402128;border-color:#915159;color:#ffcccc}.notice .symbol{font-size:17px;font-weight:850}.status{font-size:12px;color:#b9c9e1;max-width:390px;margin:8px 0 0}
+.option-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px;align-items:start}.row-input label{display:block;font-size:12px;font-weight:700;color:#d1dff0;margin-bottom:6px}.row-input input{width:100%;background:#0e1a2a;color:var(--txt);border:1px solid #526984;padding:11px 13px;border-radius:9px;font-size:13px}.option-footer{margin:15px 0 14px;display:flex;flex-wrap:wrap;gap:12px 22px}.option-footer label{font-size:12px;color:#d2dfee;display:flex;align-items:flex-start;gap:9px;cursor:pointer;max-width:100%}.option-footer input{accent-color:#99c8ff;width:16px;height:16px;flex:0 0 auto}.actions{display:flex;gap:12px;flex-wrap:wrap}.btn{border-radius:11px;font-weight:800;min-height:48px;padding:11px 21px;font-size:14px}.mainbtn{flex:2 1 255px;background:#a8cdff;border:1px solid #d2e7ff;color:#10233b}.mainbtn:not(:disabled):hover{background:#c0dcff}.dl{flex:1 1 200px;display:flex;align-items:center;justify-content:center;text-decoration:none;color:#adf0ca;background:#164737;border:1px solid #449977}.dl[aria-disabled="true"]{opacity:.43;pointer-events:none}.outline{background:#203450;border:1px solid #52749c;color:#deedff;padding:9px 14px;font-size:12px}
+.progress{display:none;margin-top:16px;padding:13px;border:1px solid #3b5170;border-radius:10px;background:#152942}.progress.show{display:block}.progline{display:flex;justify-content:space-between;gap:10px;color:#cddff5;font-size:12px}.track{height:8px;border-radius:12px;background:#293d59;overflow:hidden;margin-top:9px}.bar{height:100%;width:0;background:linear-gradient(90deg,#65a2f8,#8fe4c5);transition:width .1s}.result{display:none;margin-top:14px;border-radius:10px;padding:13px 15px;background:#153a2d;border:1px solid #36805c}.result.show{display:block}.result strong{color:#a4f3d0}.result p{font-size:12px;color:#d1e6dd;margin:5px 0 0;overflow-wrap:anywhere}footer{text-align:center;padding:29px 20px 42px;font-size:12px;color:#a9beda}footer strong{color:#d0e7f6}details{background:#101d30;border:1px solid #324862;border-radius:12px;padding:12px 15px;margin-top:17px;color:#becfe5;font-size:12px}summary{font-size:13px;color:#e1ebf9;cursor:pointer;font-weight:750}details p{margin:9px 0 0}kbd{border:1px solid #516784;border-radius:4px;padding:1px 4px;background:#24324b;color:#e0ecff}
+/* Compact public counter in the last line of the footer; no card and no reserved panel space. */
+.usage-panel{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:2px 11px;margin:7px auto 0;padding:0;border:0;background:none;color:#8293aa;font-size:10px;font-weight:400;line-height:1.25;opacity:.72}
+.usage-panel .usage-label{color:inherit}.usage-panel b{font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;color:inherit}
+.usage-panel #counterConnection{max-width:145px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:middle;font-size:9px;color:#a5a1a3}
+.usage-panel #counterConnection[data-status="good"]{color:#87a69d}
+@media(max-width:440px){.usage-panel{gap:2px 8px;font-size:9px}.usage-panel b{font-size:9px}.usage-panel #counterConnection{font-size:9px}}
+[hidden]{display:none!important}
+@media(max-width:780px){header{padding-top:22px}.two{grid-template-columns:1fr}.details-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.option-grid{grid-template-columns:1fr}.panel{padding:17px}.drop{min-height:157px}.hero{align-items:flex-start}.pill{font-size:11px}}
+@media(max-width:440px){.wrap{padding-left:12px;padding-right:12px}h1{font-size:23px}.logo{width:46px;height:46px}.format-list b,.format-list span{font-size:11px}.details-grid{grid-template-columns:1fr}.info.wide{grid-column:span 1}.pill{padding:6px 8px}.hero{gap:12px}.panelhead{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+<header class="wrap">
+ <div class="hero"><div class="brand"><div class="logo" aria-hidden="true">▣</div><div><h1>ROM Patch Studio</h1><p class="sub">V2.1.4｜ROM · ISO · BIN 補丁工作站</p></div></div><div class="pill">● 檔案本機處理</div></div>
+ <p class="lead">載入原始遊戲檔與補丁，程式會讀取格式、檢查可取得的原始版本資訊，完成後另存新檔。支援拖曳、選檔及大型光碟映像檔的分段處理。ROM 與補丁完全在本機處理，只有匿名載入次數會連線同步。</p>
+ <div class="format-list"><b>BPS</b><b>UPS</b><b>IPS</b><b>IPS32</b><b>PPF 1／2／3</b><span class="partial">XDELTA／VCDIFF（標準無次級壓縮）</span></div>
+</header>
+<main class="wrap">
+ <div class="two">
+  <section class="panel"><div class="panelhead"><h2>01｜原始 ROM／ISO／BIN</h2><span class="tag">點選或拖曳</span></div>
+   <div class="drop" id="romDrop" role="button" tabindex="0"><span class="glyph" aria-hidden="true">⇧</span><strong>拖曳原始遊戲檔到這裡</strong><span class="hint">ROM、ISO、BIN、IMG 等未壓縮檔案</span><span class="pick">選擇遊戲檔案</span></div>
+   <input type="file" id="romInput" hidden><div class="filebox" id="romFileBox"><div class="filemeta"><div class="filename" id="romFileName"></div><div class="filedetail" id="romFileDetails"></div></div><button type="button" class="mini" id="removeRom">移除</button></div>
+  </section>
+  <section class="panel"><div class="panelhead"><h2>02｜補丁檔案</h2><span class="tag">自動辨識格式</span></div>
+   <div class="drop" id="patchDrop" role="button" tabindex="0"><span class="glyph" aria-hidden="true">⇧</span><strong>拖曳補丁到這裡</strong><span class="hint">BPS、UPS、IPS、IPS32、PPF、XDELTA</span><span class="pick">選擇補丁檔案</span></div>
+   <input type="file" id="patchInput" accept=".bps,.ups,.ips,.ips32,.ppf,.xdelta,.vcdiff,.delta" hidden><div class="filebox" id="patchFileBox"><div class="filemeta"><div class="filename" id="patchFileName"></div><div class="filedetail" id="patchFileDetails"></div></div><button type="button" class="mini" id="removePatch">移除</button></div>
+  </section>
+ </div>
+ <section class="panel section"><div class="panelhead"><div><h2>03｜補丁所需原始遊戲檔資訊</h2><p class="status">以補丁實際內含資料為準；未記載的欄位會如實標示「無資訊」，不會臆測 CRC32。</p></div><span class="tag" id="formatTag">尚未載入</span></div>
+  <div class="empty" id="emptyInfo">載入補丁後，這裡會顯示遊戲名稱、補丁格式及可取得的來源驗證資訊。</div>
+  <div class="details-grid" id="detailsGrid" hidden>
+   <div class="info wide"><div class="label">適用遊戲名稱</div><div class="value" id="gameName">—</div><div class="help" id="gameSource"></div></div>
+   <div class="info"><div class="label">推定平台</div><div class="value" id="platform">—</div></div>
+   <div class="info"><div class="label">補丁格式</div><div class="value" id="patchType">—</div></div>
+   <div class="info"><div class="label">補丁要求的原始 CRC32</div><div class="value mono" id="expectedCrc">—</div></div>
+   <div class="info"><div class="label">補丁要求原始大小</div><div class="value" id="expectedSize">—</div></div>
+   <div class="info"><div class="label">補丁預期輸出 CRC32</div><div class="value mono" id="targetCrc">—</div></div>
+   <div class="info"><div class="label">補丁預期輸出大小</div><div class="value" id="targetSize">—</div></div>
+   <div class="info"><div class="label">補丁內建版本驗證</div><div class="value" id="verifyMode">—</div></div>
+   <div class="info"><div class="label">補丁紀錄／備註</div><div class="value" id="patchRecords">—</div></div>
+  </div>
+  <div class="notice" id="notice" role="status" aria-live="polite"><span class="symbol" id="noticeSymbol">i</span><span id="noticeText">請選擇原始檔與補丁。</span></div>
+  <p class="help" id="patchNote" hidden></p>
+ </section>
+ <section class="panel section"><div class="panelhead"><h2>04｜套用補丁並另存新檔</h2><span class="tag">不會直接修改載入的來源</span></div>
+  <div class="option-grid">
+    <div class="row-input"><label for="outputName">輸出檔名</label><input id="outputName" spellcheck="false" autocomplete="off" placeholder="依原始檔自動產生" maxlength="240"></div>
+    <div class="row-input"><label for="manualCrc">補丁說明指定的原始 CRC32（選填）</label><input id="manualCrc" inputmode="text" spellcheck="false" maxlength="18" placeholder="例如 BA595897（僅無內建 CRC 的格式）"></div>
+  </div>
+  <div class="option-footer">
+   <label id="riskLabel"><input id="ackRisk" type="checkbox">我已確認無 CRC32 驗證補丁所需的原始版本與映像檔型態</label>
+   <label id="undoLabel" hidden><input id="undoPpf" type="checkbox">PPF3：使用 Undo 資料還原</label>
+   <label><input id="directSave" type="checkbox">強制使用「直接另存」方式（適用大型 ISO／BIN，Chrome／Edge）</label>
+  </div>
+  <div class="actions"><button class="btn mainbtn" id="applyBtn" type="button" disabled>開始套用補丁</button><a class="btn dl" id="downloadBtn" role="button" aria-disabled="true" tabindex="-1">下載另存新的 ROM／ISO</a><button class="btn outline" id="hashBtn" type="button" disabled>計算原始 CRC32</button></div>
+  <div class="progress" id="progress"><div class="progline"><span id="progressText">準備中</span><span id="progressPct">0%</span></div><div class="track"><div class="bar" id="progressBar"></div></div></div>
+  <div class="result" id="result"><strong id="resultTitle">補丁套用完成</strong><p id="resultDetails"></p></div>
+  <p class="help" id="saveHint">檔案較小時產生瀏覽器下載；大型 ISO／BIN 會改以 Chrome／Edge 的檔案儲存視窗直接分段寫入，不必把整份映像檔載入記憶體。</p>
+ </section>
+ <details><summary>支援限制、光碟注意事項與隱私說明</summary>
+   <p><strong>主機：</strong>不依主機名稱限制，FC、SFC、GB、GBA、MD、N64、NDS 等一般 ROM，及 PS1、PS2、PSP、Saturn、Dreamcast、GameCube、Wii 等未壓縮 ISO／BIN 均可依相符補丁嘗試；可套用不等於可以修復壓縮或特殊封裝。</p>
+   <p><strong>格式：</strong>BPS、UPS 會驗證補丁及輸出 CRC32；PPF2／PPF3 可依原始區塊驗證；IPS／IPS32／PPF1 無內建原始 CRC32，請搭配補丁發布者指定版本。BPS 目標需暫存（上限 512 MiB）。VCDIFF 小型檔案可在記憶體模式下載，大型檔案可分段直存，但直存模式尚未支援 VCD_TARGET 跨視窗回讀。XDELTA 目前支援採標準碼表、未採用次級壓縮的 VCDIFF；含 LZMA/DJW/自訂碼表的版本會明確拒絕，不會假裝成功。</p>
+   <p><strong>大型檔案：</strong>IPS、IPS32、PPF、UPS 以及支援的 XDELTA 可分段處理，需 Chrome／Edge 提供 File System Access API；是否可完成仍取決於可用磁碟空間、瀏覽器與檔案實際結構。IPS 只能寫入前 16 MiB，IPS32 最高使用 32-bit 偏移；PPF3 支援 64-bit 偏移但受瀏覽器安全整數限制。</p>
+   <p><strong>光碟：</strong>CUE 是索引，請對補丁指定的 BIN/ISO 操作。多音軌或多檔 BIN 不會自動整合；套用後保留原有 CUE 並確認檔名對應。CHD、CSO、RVZ、GCZ 等壓縮映像須先解壓還原，程式不會把它們冒充原始 ISO。</p>
+   <p><strong>隱私：</strong>這份 HTML 的補丁處理 CSS、JavaScript 及工作執行緒完全內嵌。ROM、ISO、BIN、補丁內容與檔名都只留在本機；只在設定 Google Apps Script 計數服務後，傳送「ROM 或補丁」的匿名載入事件與隨機去重 ID，不傳送任何檔案資料。無網路仍可打補丁；計數會留在本機佇列，恢復連線後嘗試同步。</p>
+ </details>
+</main>
+<footer class="wrap">ROM Patch Studio V2.1.4 · 繁體中文（臺灣） · <strong>檔案本機處理／全球共用匿名載入計數</strong><br>請使用自己合法取得的遊戲檔與補丁。大型檔案儲存請使用最新版 Chrome 或 Edge。
+ <div class="usage-panel" aria-label="全球共用檔案載入統計（臺灣時間）" title="每次選取或拖入 ROM 或補丁時記錄一次，資料只包含類型與匿名事件編號，不上傳任何檔案資訊。">
+  <span class="usage-label">全球計次</span>
+  <span>今日 <b id="todayLoadCount">—</b></span>
+  <span>累積 <b id="totalLoadCount">—</b></span>
+  <span>ROM <b id="romLoadCount">—</b></span>
+  <span>補丁 <b id="patchLoadCount">—</b></span>
+  <span id="counterConnection" data-status="warn" role="status" aria-live="polite">讀取中…</span>
+ </div>
+</footer>
+<script id="worker-source" type="text/plain">
+'use strict';
+// ROM Patch Studio V2.0.0. This worker only reads local File/Blob objects.
+const MEMORY_LIMIT = 512 * 1024 * 1024;
+const CHUNK = 4 * 1024 * 1024;
+const MAX_WINDOW = 128 * 1024 * 1024;
+const MAX_RECORDS = 20000000;
+const TABLE = new Uint32Array(256);
+for (let i=0;i<256;i++){let c=i;for(let j=0;j<8;j++)c=(c&1)?(c>>>1)^0xEDB88320:c>>>1;TABLE[i]=c>>>0;}
+function crcStep(c,bytes){for(let i=0;i<bytes.length;i++)c=TABLE[(c^bytes[i])&255]^(c>>>8);return c>>>0;}
+function crc32(bytes){return (crcStep(0xffffffff,bytes)^0xffffffff)>>>0;}
+function crcHex(c){return (c>>>0).toString(16).toUpperCase().padStart(8,'0');}
+function die(s){throw new Error(s);}
+function checkSafe(n,label){if(!Number.isSafeInteger(n)||n<0)die(label+' 數值超出安全範圍。');return n;}
+function ascii(bytes){return Array.from(bytes).map(x=>String.fromCharCode(x)).join('');}
+function readLE32(b,p){return (b[p]|(b[p+1]<<8)|(b[p+2]<<16)|(b[p+3]<<24))>>>0;}
+function readBE32(b,p){return ((b[p]<<24)|(b[p+1]<<16)|(b[p+2]<<8)|b[p+3])>>>0;}
+function isMatching(b,offset,s){for(let i=0;i<s.length;i++)if(b[offset+i]!==s.charCodeAt(i))return false;return true;}
+function decText(b){let s=new TextDecoder('utf-8').decode(b);if(s.includes('\ufffd')){try{s=new TextDecoder('shift_jis').decode(b);}catch(e){}}return s.replace(/[\x00-\x1f]+/g,' ').trim();}
+function notify(job, message, percent){self.postMessage({kind:'progress',job,message,percent:Math.max(0,Math.min(100,Math.round(percent)))});}
+async function sliceBytes(file, start, end){return new Uint8Array(await file.slice(start,end).arrayBuffer());}
+async function hashFile(file,start=0,end=file.size,job=null,from=0,to=100){
+  let c=0xffffffff;for(let pos=start;pos<end;pos+=CHUNK){const b=await sliceBytes(file,pos,Math.min(pos+CHUNK,end));c=crcStep(c,b);if(job&&((pos-start)%(CHUNK*12)===0))notify(job,'分段計算 CRC32',from+(to-from)*(pos-start)/(end-start||1));}
+  return (c^0xffffffff)>>>0;
+}
+class Cursor{
+  constructor(file, start=0, end=file.size){this.file=file;this.pos=start;this.end=end;this.cached=new Uint8Array(0);this.cachedStart=start;}
+  async refill(){if(this.pos>=this.end)die('補丁檔提前結束。');this.cachedStart=this.pos;this.cached=await sliceBytes(this.file,this.pos,Math.min(this.pos+256*1024,this.end));if(!this.cached.length)die('讀取補丁資料失敗。');}
+  async byte(){if(this.pos<this.cachedStart||this.pos>=this.cachedStart+this.cached.length)await this.refill();return this.cached[this.pos++-this.cachedStart];}
+  async take(n){checkSafe(n,'補丁讀取長度');if(this.pos+n>this.end)die('補丁資料不完整，已停止。');if(n===0)return new Uint8Array(0);
+    if(this.pos>=this.cachedStart&&this.pos+n<=this.cachedStart+this.cached.length){let b=this.cached.subarray(this.pos-this.cachedStart,this.pos-this.cachedStart+n);this.pos+=n;return b;}
+    const b=await sliceBytes(this.file,this.pos,this.pos+n);if(b.length!==n)die('補丁讀取失敗。');this.pos+=n;return b;
+  }
+  async skip(n){checkSafe(n,'補丁略過長度');if(this.pos+n>this.end)die('補丁資料長度異常。');this.pos+=n;}
+  async be16(){const b=await this.take(2);return b[0]*256+b[1];}
+  async be24(){const b=await this.take(3);return b[0]*65536+b[1]*256+b[2];}
+  async be32(){const b=await this.take(4);return readBE32(b,0);}
+  async le32(){const b=await this.take(4);return readLE32(b,0);}
+  async le64(){const b=await this.take(8);const n=BigInt(readLE32(b,0))+(BigInt(readLE32(b,4))<<32n);if(n>BigInt(Number.MAX_SAFE_INTEGER))die('PPF3 補丁指定的偏移超過瀏覽器安全整數範圍。');return Number(n);}
+  async bpsVar(){let value=0,shift=1;for(let i=0;i<10;i++){const x=await this.byte();value+=(x&127)*shift;checkSafe(value,'BPS/UPS 數值');if(x&128)return value;shift*=128;value+=shift;checkSafe(value,'BPS/UPS 數值');}die('補丁變數整數過長。');}
+  async vVar(){let value=0;for(let i=0;i<10;i++){let x=await this.byte();value=value*128+(x&127);checkSafe(value,'VCDIFF 數值');if(!(x&128))return value;}die('VCDIFF 整數過長。');}
+  // Fetch up to 256 KiB of nonzero UPS XOR bytes and consume the delimiter if present.
+  async upsRun(){if(this.pos>=this.end)die('UPS XOR 區塊缺少終止符。');if(this.pos<this.cachedStart||this.pos>=this.cachedStart+this.cached.length)await this.refill();
+    const a=this.pos-this.cachedStart;let end=Math.min(this.cached.length,this.end-this.cachedStart);let i=a;while(i<end&&this.cached[i]!==0)i++;const part=this.cached.subarray(a,i);this.pos=this.cachedStart+i;const done=i<end;if(done)this.pos++;return {part,done};
+  }
+}
+async function identify(file){
+  let b=await sliceBytes(file,0,Math.min(4096,file.size));const ext=file.name.toLowerCase();let platform='無法僅由檔頭確定';let blocked=null;
+  if(ext.endsWith('.cue')||ext.endsWith('.gdi')||ext.endsWith('.m3u')||ext.endsWith('.ccd'))blocked='這是光碟索引／播放清單，不是映像檔內容。請依補丁說明選擇對應的 .bin、.iso 或 .img。';
+  if(ext.endsWith('.chd')||isMatching(b,0,'MComprHD'))blocked='CHD 為壓縮容器，必須先還原為補丁指定的原始 BIN/ISO。';
+  if(ext.endsWith('.cso')||isMatching(b,0,'CISO')||ext.endsWith('.zso')||ext.endsWith('.rvz')||ext.endsWith('.gcz')||ext.endsWith('.ciso'))blocked='這是壓縮映像格式。請先還原為補丁要求的未壓縮 ISO/BIN，再套用補丁。';
+  if(isMatching(b,0,'NES\x1a'))platform='Nintendo FC / NES';
+  else if(b.length>=0x104&&isMatching(b,0x100,'SEGA'))platform='SEGA Mega Drive / Genesis';
+  else if(b.length>0xB3&&b[0xB2]===0x96&&b[0xB3]===0)platform='Nintendo Game Boy Advance';
+  else if(b.length>0x109&&b[0x104]===0xCE&&b[0x105]===0xED&&b[0x106]===0x66&&b[0x107]===0x66)platform='Nintendo GB / GBC';
+  else if(ext.endsWith('.iso')||ext.endsWith('.bin')||ext.endsWith('.img')||ext.endsWith('.mdf'))platform='光碟映像檔（主機無法單憑副檔名判定）';
+  else if(ext.endsWith('.gba'))platform='Nintendo Game Boy Advance（依副檔名）';
+  else if(ext.endsWith('.gb')||ext.endsWith('.gbc'))platform='Nintendo Game Boy（依副檔名）';
+  else if(ext.endsWith('.sfc')||ext.endsWith('.smc'))platform='Nintendo SFC / SNES（依副檔名）';
+  else if(ext.endsWith('.nds'))platform='Nintendo DS（依副檔名）';
+  else if(ext.endsWith('.n64')||ext.endsWith('.z64')||ext.endsWith('.v64'))platform='Nintendo N64（依副檔名；注意位元組順序）';
+  return {size:file.size,platform,blocked};
+}
+async function checkPatchHeader(file){
+  const h=await sliceBytes(file,0,Math.min(128,file.size));
+  if(h.length>=4&&isMatching(h,0,'BPS1'))return 'BPS';
+  if(h.length>=4&&isMatching(h,0,'UPS1'))return 'UPS';
+  if(h.length>=5&&isMatching(h,0,'PATCH'))return 'IPS';
+  if(h.length>=5&&isMatching(h,0,'IPS32'))return 'IPS32';
+  if(h.length>=4&&isMatching(h,0,'PPF1'))return 'PPF1';
+  if(h.length>=4&&isMatching(h,0,'PPF2'))return 'PPF2';
+  if(h.length>=4&&isMatching(h,0,'PPF3'))return 'PPF3';
+  if(h.length>=5&&h[0]===0xd6&&h[1]===0xc3&&h[2]===0xc4)return 'VCDIFF';
+  die('無法辨識補丁內容。支援 BPS、UPS、IPS、IPS32、PPF1/2/3 與部分 XDELTA/VCDIFF。');
+}
+async function inspectPatch(file,job){
+  const type=await checkPatchHeader(file);let info={type,sourceSize:null,targetSize:null,sourceCrc:null,targetCrc:null,patchCrc:null,metadata:'',entryCount:null,validation:'none',blocked:null,undo:false,blockcheck:false};
+  if(type==='BPS'||type==='UPS'){
+    if(file.size<20)die(type+' 補丁長度過短。');
+    const footer=await sliceBytes(file,file.size-12,file.size);
+    info.sourceCrc=readLE32(footer,0);info.targetCrc=readLE32(footer,4);info.patchCrc=readLE32(footer,8);
+    const actual=await hashFile(file,0,file.size-4,job,0,70);
+    if(actual!==info.patchCrc)die(type+' 補丁 CRC32 錯誤：預期 '+crcHex(info.patchCrc)+'，實際 '+crcHex(actual)+'。');
+    let p=new Cursor(file,4,file.size-12);
+    info.sourceSize=await p.bpsVar();info.targetSize=await p.bpsVar();
+    if(type==='BPS'){
+      const n=await p.bpsVar();if(p.pos+n>p.end)die('BPS 備註長度異常。');
+      const b=await p.take(Math.min(n,4096));info.metadata=decText(b).slice(0,800);if(n>b.length)await p.skip(n-b.length);
+    }
+    info.bodyOffset=p.pos;info.bodyEnd=file.size-12;info.validation='crc32';
+  }else if(type==='IPS'||type==='IPS32'){
+    const r=await scanRecords(file,type,null,job,true);Object.assign(info,r);info.validation='none';
+  }else if(type.startsWith('PPF')){
+    const header=await sliceBytes(file,0,Math.min(1084,file.size));
+    if(header.length<56)die('PPF 標頭不完整。');info.metadata=decText(header.subarray(6,56)).slice(0,400);
+    if(type==='PPF2'){
+      if(header.length<1084)die('PPF2 資料驗證區不完整。');
+      info.sourceSize=readLE32(header,56);info.blockcheck=true;
+    } else if(type==='PPF3'){
+      if(header.length<60)die('PPF3 標頭不完整。');
+      info.imageType=header[56];info.blockcheck=header[57]!==0;info.undo=header[58]!==0;
+      if(info.imageType>1||header[57]>1||header[58]>1)die('PPF3 標頭參數不合法。');
+      if(info.blockcheck&&header.length<1084)die('PPF3 驗證區不完整。');
+    }
+    const r=await scanRecords(file,type,info,job,true);Object.assign(info,r);
+    info.validation=info.blockcheck?'block':'none';
+  }else if(type==='VCDIFF'){
+    const c=new Cursor(file,3);const version=await c.byte();if(version!==0)die('VCDIFF 版本不受支援：'+version+'（僅支援標準版本 0）。');const flags=await c.byte();info.flags=flags;
+    if(flags&~7)die('VCDIFF 檔頭含未知旗標，無法安全處理。');
+    if(flags&1) {info.blocked='此 XDELTA 使用次級壓縮（例如 LZMA、DJW），目前離線版尚無對應解壓核心。';}
+    if(flags&2) {info.blocked='此 XDELTA 使用自訂 VCDIFF 碼表，現有解碼核心不適用。';}
+    if(flags&1)await c.byte();
+    if(flags&2){const len=await c.vVar();await c.skip(len);}
+    if(flags&4){const len=await c.vVar();if(len>65536)die('XDELTA 附加資料過長。');info.metadata=decText(await c.take(len)).slice(0,500);}
+    info.bodyOffset=c.pos;info.validation='none';
+  }
+  return info;
+}
+// PPF file_id.diz trailers contain an extra 30-byte envelope.
+async function ppfDataEnd(file,type,start){
+  if(type==='PPF1')return file.size;
+  const lenSize=type==='PPF2'?4:2;
+  if(file.size<start+lenSize+4)return file.size;
+  const footer=await sliceBytes(file,file.size-(lenSize+4),file.size);
+  if(!isMatching(footer,0,'.DIZ'))return file.size;
+  const len=(type==='PPF2'?readLE32(footer,4):footer[4]|(footer[5]<<8));
+  const trailer=len+(type==='PPF2'?38:36);
+  if(len>3072||trailer>file.size-start)die('PPF File_ID.DIZ 結尾不合法。');
+  return file.size-trailer;
+}
+async function scanRecords(file,type,info,job,inspection){
+  const ips=type==='IPS'||type==='IPS32';const start=ips?5:type==='PPF1'?56:(type==='PPF2'||info.blockcheck)?1084:60;
+  const end=ips?file.size:await ppfDataEnd(file,type,start);
+  if(end<start)die('補丁檔案缺少紀錄資料。');
+  let cur=new Cursor(file,start,end),count=0,maxWrite=0,truncateSize=null;
+  while(cur.pos<cur.end){
+    if(++count>MAX_RECORDS)die('補丁紀錄超過安全上限。');
+    let offset,size,n,byte=null;
+    if(ips){
+      const sizeOffset=type==='IPS'?3:4;const raw=await cur.take(sizeOffset);
+      if((type==='IPS'&&isMatching(raw,0,'EOF'))||(type==='IPS32'&&isMatching(raw,0,'EEOF'))){
+        count--;if(cur.pos<cur.end){if(cur.end-cur.pos!==sizeOffset)die('IPS EOF 後附加資料長度錯誤。');truncateSize=type==='IPS'?await cur.be24():await cur.be32();}break;
+      }
+      offset=type==='IPS'?raw[0]*65536+raw[1]*256+raw[2]:readBE32(raw,0);
+      size=await cur.be16();if(size===0){n=await cur.be16();byte=await cur.byte();}else{n=size;await cur.skip(size);}
+    }else{
+      offset=type==='PPF3'?await cur.le64():await cur.le32();n=await cur.byte();
+      await cur.skip(n*(type==='PPF3'&&info.undo?2:1));
+    }
+    checkSafe(offset+n,'寫入偏移');maxWrite=Math.max(maxWrite,offset+n);
+    if(job && (count%10000===0))notify(job,inspection?'掃描補丁寫入紀錄':'寫入補丁紀錄',Math.min(95,10+70*(cur.pos-start)/(end-start||1)));
+  }
+  if(ips && cur.pos!==cur.end)die('IPS 結束標記後包含未知資料。');
+  if(ips&&count===0&&truncateSize===null)die('IPS 沒有有效紀錄。');
+  if(!ips&&cur.pos!==cur.end)die('PPF 補丁紀錄長度不正確。');
+  return {entryCount:count,maxWrite,truncateSize,bodyOffset:start,bodyEnd:end,targetSize:truncateSize};
+}
+async function verifyInput(rom,info,job,manualCrc=null,undo=false){
+  let r={ready:true,kind:'warn',message:'此格式不內建原始 CRC32。請依補丁發布者說明確認版本、區域、映像格式與備份檔頭。',headerSkip:0,direction:'forward',actualCrc:null};
+  if(info.type==='BPS'||info.type==='UPS'){
+    notify(job,'逐區塊檢查原始檔 CRC32',0);
+    const full=await hashFile(rom,0,rom.size,job,0,75);r.actualCrc=full;
+    const cases=[{size:info.sourceSize,crc:info.sourceCrc,direction:'forward'},...(info.type==='UPS'?[{size:info.targetSize,crc:info.targetCrc,direction:'reverse'}]:[])];
+    for(let c of cases){if(rom.size===c.size&&full===c.crc){r.kind='ok';r.message='原始檔大小與 CRC32 完全符合補丁'+(c.direction==='reverse'?'（UPS 反向還原）':'')+'。';r.direction=c.direction;return r;}}
+    for(let c of cases){if(rom.size===c.size+512){const stripped=await hashFile(rom,512,rom.size,job,75,95);if(stripped===c.crc){r.kind='ok';r.headerSkip=512;r.direction=c.direction;r.message='去除 512 bytes 備份器檔頭後，大小及 CRC32 符合；輸出不保留備份器檔頭。';return r;}}}
+    r.ready=false;r.kind='bad';r.message='ROM 版本不符！補丁要求 '+crcHex(info.sourceCrc)+'（'+info.sourceSize+' bytes）；目前是 '+crcHex(full)+'（'+rom.size+' bytes）'+(info.type==='UPS'?'；反向目標版本也不符。':'。');return r;
+  }
+  if(info.type==='PPF2'&&rom.size!==info.sourceSize){r.ready=false;r.kind='bad';r.message='PPF2 要求原始檔大小 '+info.sourceSize+' bytes，目前是 '+rom.size+' bytes。';return r;}
+  if(info.blockcheck && !undo){
+    const off=info.type==='PPF3'&&info.imageType===1?0x80A0:0x9320;
+    if(rom.size<off+1024){r.ready=false;r.kind='bad';r.message='原始映像檔過短，無法驗證 PPF 區塊。';return r;}
+    const expected=await sliceBytes(info._patchFile,60,1084);
+    const actual=await sliceBytes(rom,off,off+1024);
+    for(let i=0;i<1024;i++){if(expected[i]!==actual[i]){r.ready=false;r.kind='bad';r.message='PPF 原始區塊比對失敗（偏移 0x'+off.toString(16).toUpperCase()+'），可能是 ISO/BIN 區別或修訂版不正確。';return r;}}
+    r.kind='ok';r.message='PPF 原始資料區塊驗證通過'+(info.type==='PPF2'?'，檔案大小也符合':'')+'。';
+  }
+  if(undo&&info.type==='PPF3')r.message='PPF3 還原使用補丁內的 Undo 資料；來源區塊只適用於正向套用，還原時不以該區塊判斷。';
+  if(manualCrc!==null&&manualCrc!==undefined&&String(manualCrc).trim()){
+    const want=String(manualCrc).trim().replace(/^(0x|CRC32\s*[:：])/i,'').toUpperCase();if(!/^[0-9A-F]{8}$/.test(want))die('手動 CRC32 請輸入 8 個十六進位字元。');
+    let actual=await hashFile(rom,0,rom.size,job,0,100);r.actualCrc=actual;
+    if(crcHex(actual)!==want){r.ready=false;r.kind='bad';r.message='手動指定 CRC32 '+want+' 與目前檔案 '+crcHex(actual)+' 不符，已阻止套用。';}
+    else{r.kind='ok';r.message='符合你輸入的原始 CRC32 '+want+'。'+(info.blockcheck?' PPF 區塊也符合。':'');}
+  }
+  return r;
+}
+class Sink{
+  constructor(writer=null,expected=0){this.writer=writer;this.parts=[];this.pos=0;this.expected=expected;}
+  async write(buf){if(!buf||!buf.length)return;if(this.writer)await this.writer.write(buf);else{if(this.pos+buf.length>MEMORY_LIMIT)die('輸出超過記憶體下載限制，請使用 Chrome/Edge「直接另存大型檔案」。');this.parts.push(buf.slice());}this.pos+=buf.length;}
+  async patch(offset,buf){if(!buf.length)return;if(this.writer){await this.writer.write({type:'write',position:offset,data:buf});}else die('隨機寫入只允許直接檔案儲存流程。');}
+  async truncate(n){if(this.writer)await this.writer.truncate(n);}
+  async close(){if(this.writer)await this.writer.close();}
+  async abort(){if(this.writer)try{await this.writer.abort();}catch(e){}}
+}
+async function fillFromSource(rom,skip,sink,begin,length,job,reason='複製原始檔'){ 
+  let pos=begin;const effective=Math.max(0,rom.size-skip);
+  while(pos<begin+length){const n=Math.min(CHUNK,begin+length-pos);let b;
+    if(pos>=effective)b=new Uint8Array(n);
+    else{b=await sliceBytes(rom,skip+pos,skip+Math.min(pos+n,effective));if(b.length<n){let t=new Uint8Array(n);t.set(b);b=t;}}
+    await sink.write(b);pos+=n;if(job&&pos%(CHUNK*32)<CHUNK)notify(job,reason,18+55*pos/Math.max(1,begin+length));
+  }
+}
+async function applySparse(rom,patch,info,handle,job,undo=false){
+  const outSize=info.type==='IPS'||info.type==='IPS32' ? (info.truncateSize===null?Math.max(rom.size,info.maxWrite):info.truncateSize):Math.max(rom.size,info.maxWrite);
+  checkSafe(outSize,'輸出檔案大小');if(outSize>Number.MAX_SAFE_INTEGER)die('輸出大小不安全。');
+  if(!handle&&outSize>MEMORY_LIMIT)die('此檔案需要「大型檔案直接另存」功能；目前瀏覽器未提供。');
+  let writer=handle?await handle.createWritable({keepExistingData:false}):null;
+  try{
+    let data=null;
+    if(writer){let sink=new Sink(writer);await fillFromSource(rom,0,sink,0,Math.min(outSize,rom.size),job);await sink.truncate(outSize);}
+    else{data=new Uint8Array(outSize);for(let p=0;p<Math.min(rom.size,outSize);p+=CHUNK)data.set(await sliceBytes(rom,p,Math.min(rom.size,outSize,p+CHUNK)),p);}
+    const c=new Cursor(patch,info.bodyOffset,info.bodyEnd);let entries=0;
+    while(c.pos<c.end){
+      let off,n,src;
+      if(info.type==='IPS'||info.type==='IPS32'){
+        const k=info.type==='IPS'?3:4, b=await c.take(k);
+        if((k===3&&isMatching(b,0,'EOF'))||(k===4&&isMatching(b,0,'EEOF'))){if(c.pos<c.end)await c.skip(k);break;}
+        off=k===3?b[0]*65536+b[1]*256+b[2]:readBE32(b,0);
+        const size=await c.be16();if(size){n=size;src=await c.take(size);}else{n=await c.be16();const val=await c.byte();src=new Uint8Array(n);src.fill(val);}
+      }else{
+        off=info.type==='PPF3'?await c.le64():await c.le32();n=await c.byte();src=await c.take(n);
+        if(info.type==='PPF3'&&info.undo){if(undo)src=await c.take(n);else await c.skip(n);}
+      }
+      if(off+n>outSize&&n>0){if(info.truncateSize!==null){const len=Math.max(0,outSize-off);src=src.subarray(0,len);}else die('補丁寫入超出目標檔案範圍。');}
+      if(src.length){if(writer)await writer.write({type:'write',position:off,data:src});else data.set(src,off);}
+      entries++;if(entries%10000===0)notify(job,'套用 '+info.type+' 補丁',72+22*(c.pos-info.bodyOffset)/(info.bodyEnd-info.bodyOffset||1));
+    }
+    if(writer){await writer.close();let crc=null;if(outSize<=512*1024*1024){try{crc=await hashFile(await handle.getFile(),0,outSize,job,94,99);}catch(e){}}return {saved:true,size:outSize,crc,entries};}
+    return {saved:false,size:outSize,crc:crc32(data),buffers:[data.buffer],entries};
+  }catch(e){if(writer)try{await writer.abort();}catch(ex){}throw e;}
+}
+async function applyBps(rom,patch,info,skip,handle,job){
+  if(info.targetSize>MEMORY_LIMIT)die('BPS 的輸出含目標回讀指令，目前限制 512 MiB；大型 ISO 請優先使用 PPF/IPS32 或 UPS 補丁。');
+  const out=new Uint8Array(info.targetSize),p=new Cursor(patch,info.bodyOffset,info.bodyEnd);
+  let outPos=0,srcRel=0,dstRel=0,actions=0,sourceLen=rom.size-skip;
+  while(outPos<out.length){const v=await p.bpsVar(),cmd=v%4,len=Math.floor(v/4)+1;if(!Number.isSafeInteger(len)||outPos+len>out.length)die('BPS 指令輸出範圍異常。');
+    if(cmd===0||cmd===2){let off;if(cmd===0)off=outPos;else{const rel=await p.bpsVar();srcRel+=Math.floor(rel/2)*(rel%2?-1:1);off=srcRel;}
+      if(off<0||off+len>sourceLen)die('BPS 讀取原始 ROM 超出範圍。');
+      for(let i=0;i<len;i+=CHUNK){const b=await sliceBytes(rom,skip+off+i,skip+off+Math.min(i+CHUNK,len));out.set(b,outPos+i);}if(cmd===2)srcRel+=len;
+    }else if(cmd===1){for(let i=0;i<len;i+=CHUNK)out.set(await p.take(Math.min(CHUNK,len-i)),outPos+i);
+    }else{const rel=await p.bpsVar();dstRel+=Math.floor(rel/2)*(rel%2?-1:1);if(dstRel<0||dstRel>=outPos)die('BPS TargetCopy 參照錯誤。');
+      // Overlapping copies are intentional and must be bytewise-forward.
+      if(dstRel+len<=outPos)out.copyWithin(outPos,dstRel,dstRel+len);else for(let i=0;i<len;i++)out[outPos+i]=out[dstRel+i];dstRel+=len;
+    }
+    outPos+=len;actions++;if(actions%1024===0)notify(job,'套用 BPS 補丁',18+65*outPos/Math.max(1,out.length));
+  }
+  if(p.pos!==info.bodyEnd)die('BPS 指令尾端有多餘或缺少資料。');const resultCrc=crc32(out);
+  if(resultCrc!==info.targetCrc)die('輸出 CRC32 不符：預期 '+crcHex(info.targetCrc)+'、實際 '+crcHex(resultCrc)+'。');
+  if(handle){const writer=await handle.createWritable({keepExistingData:false});try{for(let i=0;i<out.length;i+=CHUNK)await writer.write(out.subarray(i,i+CHUNK));await writer.close();}catch(e){try{await writer.abort();}catch(x){}throw e;}return {saved:true,size:out.length,crc:resultCrc};}
+  return {saved:false,size:out.length,crc:resultCrc,buffers:[out.buffer]};
+}
+async function applyUps(rom,patch,info,skip,direction,handle,job){
+  const sourceSize=rom.size-skip, targetSize=direction==='reverse'?info.sourceSize:info.targetSize;
+  if(!handle&&targetSize>MEMORY_LIMIT)die('大型 UPS 需要支援「另存大型檔案」的 Chrome／Edge。');
+  const writer=handle?await handle.createWritable({keepExistingData:false}):null;
+  const sink=new Sink(writer,targetSize),p=new Cursor(patch,info.bodyOffset,info.bodyEnd);
+  let outPos=0,c=0xffffffff,records=0,offset=0;
+  async function emitFromSource(end){if(end<outPos)die('UPS 相對偏移重疊。');end=Math.min(end,targetSize);
+    while(outPos<end){const n=Math.min(CHUNK,end-outPos);let b=outPos>=sourceSize?new Uint8Array(n):await sliceBytes(rom,skip+outPos,skip+Math.min(sourceSize,outPos+n));
+      if(b.length<n){const a=new Uint8Array(n);a.set(b);b=a;}c=crcStep(c,b);await sink.write(b);outPos+=n;}
+  }
+  try{
+    while(p.pos<p.end){const delta=await p.bpsVar();offset+=delta;checkSafe(offset,'UPS 偏移');await emitFromSource(offset);
+      while(true){const {part,done}=await p.upsRun();let n=Math.min(part.length,Math.max(0,targetSize-offset));
+        if(n){let b=offset>=sourceSize?new Uint8Array(n):await sliceBytes(rom,skip+offset,skip+Math.min(offset+n,sourceSize));
+          if(b.length<n){const a=new Uint8Array(n);a.set(b);b=a;}
+          for(let i=0;i<n;i++)b[i]^=part[i];
+          // position can exceed output end, but once exceeded no more writes
+          c=crcStep(c,b);await sink.write(b);outPos+=n;
+        }
+        offset+=part.length;if(done){offset++;break;}
+      }
+      if(++records%100===0)notify(job,'逐區塊套用 UPS 補丁',15+70*(p.pos-info.bodyOffset)/(info.bodyEnd-info.bodyOffset||1));
+    }
+    await emitFromSource(targetSize);
+    if(sink.pos!==targetSize)die('UPS 輸出長度異常：'+sink.pos+' / '+targetSize);
+    const outCrc=(c^0xffffffff)>>>0,expected=direction==='reverse'?info.sourceCrc:info.targetCrc;
+    if(outCrc!==expected)die('UPS 輸出 CRC32 不符：預期 '+crcHex(expected)+'、實際 '+crcHex(outCrc)+'。');
+    await sink.close();if(writer)return {saved:true,size:targetSize,crc:outCrc};return {saved:false,size:targetSize,crc:outCrc,buffers:sink.parts.map(x=>x.buffer)};
+  }catch(e){await sink.abort();throw e;}
+}
+const CODE_TABLE=(()=>{const a=[];a.push([[2,0,0]]);a.push([[1,0,0]]);for(let n=1;n<=17;n++)a.push([[1,n,0]]);
+  for(let mode=0;mode<9;mode++){a.push([[3,0,mode]]);for(let n=4;n<=18;n++)a.push([[3,n,mode]]);}
+  for(let mode=0;mode<9;mode++){for(let add=1;add<=4;add++){for(let cp=4;cp<=(mode<6?6:4);cp++)a.push([[1,add,0],[3,cp,mode]]);}}
+  for(let mode=0;mode<9;mode++)a.push([[3,4,mode],[1,1,0]]);
+  if(a.length!==256)die('VCDIFF 預設碼表建置錯誤。');return a;})();
+function arrVar(arr,ref,label){let n=0;for(let i=0;i<10;i++){if(ref.p>=arr.length)die(label+' 資料不足。');const x=arr[ref.p++];n=n*128+(x&127);checkSafe(n,label);if(!(x&128))return n;}die(label+' 整數異常。');}
+function adler32(b){let a=1,c=0;for(let i=0;i<b.length;i++){a=(a+b[i])%65521;c=(c+a)%65521;}return ((c<<16)|a)>>>0;}
+async function applyVcdiff(rom,patch,info,handle,job){
+  const cursor=new Cursor(patch,info.bodyOffset);let writer=handle?await handle.createWritable({keepExistingData:false}):null;
+  let sink=new Sink(writer),outputParts=[];let outTotal=0,wins=0, outputCRC=0xffffffff;
+  try{
+    while(cursor.pos<cursor.end){
+      const winFlags=await cursor.byte();if(winFlags&~7)die('VCDIFF 視窗使用未知旗標。');if((winFlags&3)===3)die('VCDIFF 視窗不能同時設 SOURCE 和 TARGET。');
+      let segLen=0,segOff=0;if(winFlags&3){segLen=await cursor.vVar();segOff=await cursor.vVar();if((winFlags&1)&&segOff+segLen>rom.size)die('XDELTA 需要的原始檔資料範圍超出 ROM 大小。');if((winFlags&2)&&segOff+segLen>outTotal)die('XDELTA VCD_TARGET 指向尚未解碼的資料。');}
+      const encodedLen=await cursor.vVar(),bodyStart=cursor.pos,targetLen=await cursor.vVar();
+      if(targetLen>MAX_WINDOW)die('XDELTA 單一視窗超過 128 MiB 安全上限。');
+      const indicator=await cursor.byte();if(indicator!==0)die('此 XDELTA 使用次級壓縮資料區，目前尚不支援。');
+      const dLen=await cursor.vVar(),iLen=await cursor.vVar(),aLen=await cursor.vVar();
+      const expectedAdler=(winFlags&4)?await cursor.be32():null;
+      if(cursor.pos-bodyStart+dLen+iLen+aLen!==encodedLen)die('VCDIFF 視窗長度與宣告不符。');
+      if(dLen+iLen+aLen>MAX_WINDOW*2)die('XDELTA 視窗指令資料超過安全上限。');
+      const data=await cursor.take(dLen),inst=await cursor.take(iLen),addr=await cursor.take(aLen);
+      let source;
+      if(winFlags&1){if(segLen>MAX_WINDOW)die('XDELTA 來源視窗超過 128 MiB 安全上限。');source=await sliceBytes(rom,segOff,segOff+segLen);}
+      else if(winFlags&2){if(segLen>MAX_WINDOW)die('XDELTA 目標參照視窗超過 128 MiB 安全上限。');
+        if(writer)die('大型檔案模式尚不支援 VCD_TARGET 跨視窗回讀；請使用沒有此指令的 XDELTA，或使用小於 512 MiB 的記憶體模式。');
+        source=new Uint8Array(segLen);let from=segOff,to=segOff+segLen,base=0;
+        for(const part of outputParts){let e=base+part.length,l=Math.max(from,base),r=Math.min(to,e);if(r>l)source.set(part.subarray(l-base,r-base),l-from);base=e;}
+      }else source=new Uint8Array(0);
+      const result=new Uint8Array(targetLen),near=new Uint32Array(4),same=new Uint32Array(3*256);
+      const dr={p:0},ir={p:0},ar={p:0};let here=0,nextNear=0;
+      while(here<targetLen){if(ir.p>=inst.length)die('VCDIFF 指令提前結束。');const op=inst[ir.p++];
+        for(let [t,nn,mode] of CODE_TABLE[op]){
+          let n=nn===0?arrVar(inst,ir,'VCDIFF 指令長度'):nn;if(!n||here+n>targetLen)die('VCDIFF 指令覆寫超出視窗。');
+          if(t===1){if(dr.p+n>data.length)die('VCDIFF ADD 資料不足。');result.set(data.subarray(dr.p,dr.p+n),here);dr.p+=n;
+          }else if(t===2){if(dr.p>=data.length)die('VCDIFF RUN 缺少資料。');result.fill(data[dr.p++],here,here+n);
+          }else if(t===3){let address;
+            if(mode===0)address=arrVar(addr,ar,'VCDIFF SELF 地址');
+            else if(mode===1)address=segLen+here-arrVar(addr,ar,'VCDIFF HERE 地址');
+            else if(mode>=2&&mode<6)address=near[mode-2]+arrVar(addr,ar,'VCDIFF NEAR 地址');
+            else{if(ar.p>=addr.length)die('VCDIFF SAME 地址不足。');address=same[(mode-6)*256+addr[ar.p++]];}
+            if(!Number.isSafeInteger(address)||address<0||address>=segLen+here||address+n>segLen+targetLen)die('VCDIFF COPY 位址越界。');
+            near[nextNear]=address;nextNear=(nextNear+1)%4;same[address%(3*256)]=address;
+            if(address<segLen){const first=Math.min(n,segLen-address);result.set(source.subarray(address,address+first),here);if(first<n){for(let i=first;i<n;i++)result[here+i]=result[address+i-segLen];}}
+            else{const base=address-segLen;for(let i=0;i<n;i++)result[here+i]=result[base+i];}
+          }
+          here+=n;
+        }
+      }
+      if(dr.p!==data.length||ir.p!==inst.length||ar.p!==addr.length)die('VCDIFF 資料區未完全消耗，補丁可能損壞。');
+      if(expectedAdler!==null&&adler32(result)!==expectedAdler)die('VCDIFF 視窗 Adler32 驗證失敗。');
+      if(!writer&&outTotal+targetLen>MEMORY_LIMIT)die('XDELTA 輸出超過 512 MiB；請在 Chrome/Edge 使用大型檔案直接另存。');
+      await sink.write(result);if(!writer)outputParts.push(result);outputCRC=crcStep(outputCRC,result);outTotal+=targetLen;
+      wins++;if(wins%2===0)notify(job,'解碼 XDELTA / VCDIFF 視窗 '+wins,18+76*cursor.pos/patch.size);
+    }
+    await sink.close();return {saved:!!writer,size:outTotal,crc:(outputCRC^0xffffffff)>>>0,buffers:writer?undefined:sink.parts.map(x=>x.buffer),windows:wins};
+  }catch(e){await sink.abort();throw e;}
+}
+let taskSerial=0;
+self.onmessage=async ({data:m})=>{
+ try{
+   if(m.kind==='inspectRom'){const info=await identify(m.file);self.postMessage({kind:'romInfo',job:m.job,info});return;}
+   if(m.kind==='inspectPatch'){const info=await inspectPatch(m.file,m.job);self.postMessage({kind:'patchInfo',job:m.job,info});return;}
+   if(m.kind==='validate'){
+     const info={...m.info,_patchFile:m.patch};const r=await verifyInput(m.rom,info,m.job,m.manualCrc,m.undo);
+     self.postMessage({kind:'validation',job:m.job,result:r});return;
+   }
+   if(m.kind==='hashRom'){const crc=await hashFile(m.rom,0,m.rom.size,m.job);self.postMessage({kind:'romCrc',job:m.job,crc});return;}
+   if(m.kind==='apply'){
+     const info={...m.info,_patchFile:m.patch};const check=await verifyInput(m.rom,info,m.job,m.manualCrc,m.undo);
+     if(!check.ready)die(check.message);if(m.rom.size>MEMORY_LIMIT&&!m.handle)die('大型檔案需要支援直接儲存的瀏覽器。');
+     let result;if(info.type==='BPS')result=await applyBps(m.rom,m.patch,info,check.headerSkip,m.handle,m.job);
+     else if(info.type==='UPS')result=await applyUps(m.rom,m.patch,info,check.headerSkip,check.direction,m.handle,m.job);
+     else if(info.type==='VCDIFF')result=await applyVcdiff(m.rom,m.patch,info,m.handle,m.job);
+     else result=await applySparse(m.rom,m.patch,info,m.handle,m.job,m.undo);
+     notify(m.job,'補丁已成功套用',100);
+     const msg={kind:'applyResult',job:m.job,...result,headerRemoved:check.headerSkip===512,direction:check.direction};
+     if(result.buffers)self.postMessage(msg,result.buffers);else self.postMessage(msg);
+     return;
+   }
+   die('不支援的操作。');
+ }catch(e){self.postMessage({kind:'error',scope:m.kind,job:m.job,message:e instanceof Error?e.message:String(e)});}
+};
+
+</script>
+<script>
+// ROM Patch Studio V2.1.4 - global Google Sheets load counter.
+// Configured Google Apps Script deployment URL; keep unchanged when updating the UI.
+// This is intentionally independent of the Google Timeline site's counters.
+(() => {
+  'use strict';
+  const COUNTER_API_URL = 'https://script.google.com/macros/s/AKfycbx-alo8ImpLcZLbBzcoAICJCF0pJiAvTnvBFY07nAd_23MFrF9aNcZWJaOGNr8nrbjRVA/exec';
+  const QUEUE_KEY = 'rom_patch_studio_pending_load_events_v21';
+  const CACHE_KEY = 'rom_patch_studio_global_counter_cache_v21';
+  const $ = id => document.getElementById(id);
+  const configured = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]+\/exec(?:\?.*)?$/.test(COUNTER_API_URL);
+  let queue = [];
+  let lastCounts = null;
+  let sending = false;
+  let serial = 0;
+  let retryTimer = null;
+  let refreshedAt = 0;
+
+  function readStore(key) {
+    try { const value = localStorage.getItem(key); return value ? JSON.parse(value) : null; }
+    catch (_) { return null; }
+  }
+  function writeStore(key, obj) {
+    try { localStorage.setItem(key, JSON.stringify(obj)); return true; }
+    catch (_) { return false; }
+  }
+  function todayTaipei() {
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Taipei', year:'numeric', month:'2-digit', day:'2-digit'}).formatToParts(new Date());
+      const o={}; for (const p of parts) o[p.type]=p.value;
+      return `${o.year}-${o.month}-${o.day}`;
+    } catch (_) { return ''; }
+  }
+  function showCounts(data) {
+    if (!data || !data.ok) return;
+    const total=Number(data.total);
+    if (!Number.isSafeInteger(total) || total<0) return;
+    if (lastCounts && total<Number(lastCounts.total)) return; // ignore late stale responses
+    lastCounts = data;
+    const todayKey = todayTaipei();
+    const pairs = [
+      ['todayLoadCount', data.todayKey===todayKey ? data.today : 0],
+      ['totalLoadCount', data.total],
+      ['romLoadCount', data.romTotal],
+      ['patchLoadCount', data.patchTotal]
+    ];
+    for (const [id,value] of pairs) {
+      const n = Number(value);
+      if (Number.isSafeInteger(n) && n>=0) $(id).textContent=n.toLocaleString('zh-TW');
+    }
+    writeStore(CACHE_KEY, {data: data, savedAt: Date.now()});
+  }
+  function setStatus(label, status) {
+    const e=$('counterConnection');
+    e.textContent=label;
+    e.title=label;
+    e.dataset.status=status||'warn';
+  }
+  function queueLabel() {
+    const n=queue.length;
+    if (n>0) return ` · 待同步 ${n} 筆`;
+    return '';
+  }
+  function makeEventId() {
+    if (typeof crypto!=='undefined' && typeof crypto.randomUUID==='function') return crypto.randomUUID();
+    // Fallback: only deduplication ID, not an authentication token.
+    return 'ev_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,14)+'_'+Math.random().toString(36).slice(2,11);
+  }
+  // Mirror the proven Google Timeline site: fetch JSON first, JSONP fallback.
+  // The same event_id is reused after a failed fetch, so the backend dedupes retries.
+  async function requestFetch(action, event) {
+    const params = new URLSearchParams({action,t:String(Date.now())});
+    if (event) {params.set('kind',event.kind);params.set('event_id',event.id);}
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const url=COUNTER_API_URL+(COUNTER_API_URL.includes('?')?'&':'?')+params.toString();
+      const res=await fetch(url, {method:'GET',cache:'no-store',redirect:'follow',mode:'cors',credentials:'omit',signal:ctrl.signal});
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const ct=res.headers.get('content-type')||'';
+      if (ct.includes('text/html')) throw new Error('API 回傳 HTML，不是 JSON：請檢查 Apps Script 部署。');
+      const data=await res.json();
+      if (!data || data.ok!==true) throw new Error('Google API：'+(data?.error||'invalid_response')+(data?.message?' / '+data.message:''));
+      return data;
+    } finally {clearTimeout(timer);}
+  }
+  function requestJsonp(action,event) {
+    return new Promise((resolve,reject) => {
+      const name=`__romPatchCount_${Date.now()}_${++serial}`;
+      const params=new URLSearchParams({action,callback:name,t:String(Date.now())});
+      if (event) {params.set('kind',event.kind);params.set('event_id',event.id);}
+      const script=document.createElement('script');
+      script.async=true;
+      script.referrerPolicy='no-referrer';
+      script.src=COUNTER_API_URL+(COUNTER_API_URL.includes('?')?'&':'?')+params.toString();
+      let done=false;
+      const timer=setTimeout(()=>finish(new Error('JSONP 逾時：Google 未傳回有效計數資料。')),12000);
+      function finish(err,data) {
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        try { delete window[name]; } catch (_) { window[name]=undefined; }
+        if(script.parentNode)script.parentNode.removeChild(script);
+        if(err)reject(err); else resolve(data);
+      }
+      window[name]=data=>{
+        if(!data || data.ok!==true)finish(new Error('Google API：'+(data?.error||'invalid_api_response')+(data?.message?' / '+data.message:'')));
+        else finish(null,data);
+      };
+      script.onerror=()=>finish(new Error('JSONP 腳本無法載入：請確認部署網址與公開權限。'));
+      document.head.appendChild(script);
+    });
+  }
+  async function request(action,event) {
+    try{return await requestFetch(action,event);}
+    catch(fetchErr){
+      try{return await requestJsonp(action,event);}
+      catch(jsonpErr){
+        const detail='一般 JSON：'+String(fetchErr.message||fetchErr)+'；JSONP：'+String(jsonpErr.message||jsonpErr);
+        console.warn('[ROM Patch Studio Counter]',detail);
+        throw new Error(detail);
+      }
+    }
+  }
+  function setError(err, prefix) {
+    const message=String(err?.message||err||'未知錯誤');
+    setStatus((prefix||'計數服務錯誤')+queueLabel(),'warn');
+    const element=$('counterConnection');
+    element.title='計數器：'+message;
+    console.warn('[ROM Patch Studio Counter] '+(prefix||'計數服務錯誤'),message);
+  }
+  function retryLater() {
+    if(retryTimer || !configured) return;
+    retryTimer=setTimeout(()=>{retryTimer=null;flushQueue();},30000);
+  }
+  async function refresh() {
+    if (!configured || sending) return;
+    try {
+      const data=await request('get');
+      refreshedAt=Date.now();
+      showCounts(data);
+      setStatus('雲端已同步'+queueLabel(),'good');
+    } catch (err) {
+      setError(err,'計數服務未連線');
+      if (queue.length) retryLater();
+    }
+  }
+  async function flushQueue() {
+    if (!configured || sending) return;
+    if(!queue.length) {
+      if(Date.now()-refreshedAt>15000)refresh();
+      return;
+    }
+    sending=true;
+    setStatus('正在同步'+queueLabel(),'warn');
+    try {
+      while(queue.length) {
+        const event=queue[0];
+        const data=await request('hit',event);
+        queue.shift();
+        writeStore(QUEUE_KEY,queue);
+        showCounts(data);
+        refreshedAt=Date.now();
+        setStatus('雲端已同步'+queueLabel(),queue.length?'warn':'good');
+      }
+    } catch (err) {
+      setError(err,'載入計次待同步');
+      retryLater();
+    } finally {
+      sending=false;
+    }
+  }
+  function recordFileLoad(kind) {
+    if (kind!=='rom' && kind!=='patch') return;
+    if (!configured) return;
+    const event={id:makeEventId(),kind};
+    queue.push(event);
+    const stored=writeStore(QUEUE_KEY,queue);
+    setStatus((stored?'正在同步':'目前無法儲存待同步紀錄')+queueLabel(),'warn');
+    flushQueue();
+  }
+  window.romPatchCounter=Object.freeze({recordFileLoad,refresh,testConnection:()=>request('get')});
+  if (!configured) {
+    setStatus('尚未設定雲端計數服務','warn');
+    return;
+  }
+  const pending=readStore(QUEUE_KEY);
+  if(Array.isArray(pending)) {
+    queue=pending.filter(x=>x && (x.kind==='rom'||x.kind==='patch') && /^[A-Za-z0-9_-]{18,90}$/.test(x.id)).slice(0,5000);
+  }
+  const cache=readStore(CACHE_KEY);
+  if(cache && cache.data) {
+    showCounts(cache.data);
+    setStatus('顯示上次同步資料'+queueLabel(),'warn');
+  }
+  if(queue.length)flushQueue(); else refresh();
+  window.addEventListener('online',()=>{if(queue.length)flushQueue();else refresh();});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible' && !sending && Date.now()-refreshedAt>120000) {
+      if(queue.length)flushQueue();else refresh();
+    }
+  });
+})();
+
+(() => {
+  'use strict';
+  const $=id=>document.getElementById(id);
+  const hex=n=>n==null?'補丁未提供':(n>>>0).toString(16).toUpperCase().padStart(8,'0');
+  const sizes=n=>n==null?'補丁未提供':((n>=1073741824?(n/1073741824).toFixed(2)+' GiB':n>=1048576?(n/1048576).toFixed(2)+' MiB':n>=1024?(n/1024).toFixed(1)+' KiB':n+' bytes')+'（'+n.toLocaleString('en-US')+' bytes）');
+  const known={
+    '630F07C6':{name:'Honoo no Toukyuuji - Dodge Danpei (Japan)',platform:'SEGA Mega Drive / Genesis',hint:'No-Intro CRC32 比對'},
+    'BA595897':{name:'Honoo no Toukyuuji - Dodge Danpei (Japan)',platform:'Nintendo Game Boy',hint:'No-Intro CRC32 比對'}
+  };
+  const state={rom:null,patch:null,romInfo:null,patchInfo:null,validation:null,romError:null,patchError:null,busy:false,pending:{rom:'',patch:'',verify:'',hash:'',apply:''},seq:0,url:null,lastSuggested:''};
+  let worker,workerUrl;
+  try{workerUrl=URL.createObjectURL(new Blob([$('worker-source').textContent],{type:'text/javascript'}));worker=new Worker(workerUrl);}
+  catch(e){setMessage('bad','此瀏覽器無法啟動本機工作執行緒。請使用最新版 Chrome／Edge，直接開啟 HTML。');return;}
+  window.addEventListener('beforeunload',()=>{if(state.url)URL.revokeObjectURL(state.url);if(workerUrl)URL.revokeObjectURL(workerUrl);});
+  function safeName(name){return (name||'').replace(/[\\/:*?"<>|\x00-\x1f]/g,'_').replace(/[.\s]+$/g,'').trim().slice(0,220);}
+  function stem(n){return (n||'').replace(/\.(bps|ups|ips32|ips|ppf|xdelta|vcdiff|delta)$/i,'').replace(/[\s_\-\.]+(?:Chinese|Traditional|Translation|Patch|Hack|CHT|TW|繁體|繁中|漢化)(?:[\s_\-\.]+v?\d+(?:\.\d+)*)?.*$/i,'').trim() || (n||'').replace(/\.[^.]+$/,'');}
+  function suggestedName(){if(!state.rom)return '';const name=state.rom.name;const i=name.lastIndexOf('.');const ext=i>=0?name.slice(i):'.rom';const base=i>=0?name.slice(0,i):name;
+    if(state.patch){const p=state.patch.name.replace(/\.(bps|ups|ips32|ips|ppf|xdelta|vcdiff|delta)$/i,'');if(p.toLowerCase().startsWith(base.toLowerCase())&&p.length>base.length&&p.length-base.length<80)return safeName(p+ext);}
+    return safeName(base+'_patched'+ext);
+  }
+  function currentName(){let n=safeName($('outputName').value)||state.lastSuggested||'patched.rom';if(!/\.[a-z0-9]{1,10}$/i.test(n)){let ext=/\.[a-z0-9]{1,10}$/i.exec(state.rom?.name||'')?.[0]||'.rom';n+=ext;}return n;}
+  function setSuggested(force=true){let n=suggestedName(),field=$('outputName');if(force||!field.value||field.value===state.lastSuggested)field.value=n;state.lastSuggested=n;$('downloadBtn').download=currentName();}
+  function setMessage(kind,message){const box=$('notice');box.className='notice '+(kind||'');$('noticeSymbol').textContent=kind==='good'?'✓':kind==='bad'?'✕':kind==='warn'?'!':'i';$('noticeText').textContent=message;}
+  function progress(message,percent=0){$('progress').classList.add('show');$('progressText').textContent=message;$('progressPct').textContent=percent+'%';$('progressBar').style.width=percent+'%';}
+  function clearResult(){if(state.url)URL.revokeObjectURL(state.url);state.url=null;let a=$('downloadBtn');a.removeAttribute('href');a.setAttribute('aria-disabled','true');a.tabIndex=-1;$('result').classList.remove('show');$('progress').classList.remove('show');}
+  function displayFile(kind){const f=state[kind],box=$(kind+'FileBox');box.classList.toggle('show',!!f);if(!f)return;$(kind+'FileName').textContent=f.name;$(kind+'FileDetails').textContent=sizes(f.size)+' · 正在讀取…';}
+  function setFile(kind,file){if(!file||state.busy)return;state[kind]=file;state[kind+'Info']=null;state[kind+'Error']=null;state.validation=null;state.pending.verify='';state.pending[kind]=kind+'-'+(++state.seq);
+    clearResult();displayFile(kind);setSuggested(false);render();
+    // Count exactly one accepted file selection/drop; never send its contents or metadata.
+    window.romPatchCounter?.recordFileLoad(kind);
+    worker.postMessage({kind:kind==='rom'?'inspectRom':'inspectPatch',job:state.pending[kind],file});
+  }
+  function clearFile(kind){if(state.busy)return;state[kind]=null;state[kind+'Info']=null;state[kind+'Error']=null;state.pending[kind]='';state.pending.verify='';state.validation=null;$(kind+'Input').value='';clearResult();displayFile(kind);setSuggested(true);render();}
+  function bindDrop(kind){const zone=$(kind+'Drop'),input=$(kind+'Input');const choose=()=>{if(state.busy)return;input.value='';input.click();};zone.addEventListener('click',choose);zone.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();choose();}});
+    input.addEventListener('change',()=>setFile(kind,input.files?.[0]));let enters=0;
+    zone.addEventListener('dragenter',e=>{e.preventDefault();enters++;zone.classList.add('over');});zone.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='copy';zone.classList.add('over');});
+    zone.addEventListener('dragleave',e=>{e.preventDefault();enters=Math.max(0,enters-1);if(!enters)zone.classList.remove('over');});
+    zone.addEventListener('drop',e=>{e.preventDefault();enters=0;zone.classList.remove('over');if(e.dataTransfer?.files?.[0])setFile(kind,e.dataTransfer.files[0]);});
+  }
+  bindDrop('rom');bindDrop('patch');document.addEventListener('dragover',e=>e.preventDefault());document.addEventListener('drop',e=>e.preventDefault());
+  $('removeRom').addEventListener('click',()=>clearFile('rom'));$('removePatch').addEventListener('click',()=>clearFile('patch'));
+  $('outputName').addEventListener('input',()=>{$('downloadBtn').download=currentName();render();});
+  $('manualCrc').addEventListener('change',()=>{if(state.patchInfo?.validation==='crc32')return;state.validation=null;clearResult();requestValidation();});
+  $('undoPpf').addEventListener('change',()=>{state.validation=null;clearResult();requestValidation();});
+  $('ackRisk').addEventListener('change',render);$('directSave').addEventListener('change',render);
+  function lock(on){state.busy=on;['romInput','patchInput','removeRom','removePatch','manualCrc','undoPpf','ackRisk','directSave'].forEach(id=>$(id).disabled=on);['romDrop','patchDrop'].forEach(id=>{$(id).style.pointerEvents=on?'none':'';$(id).setAttribute('aria-disabled',String(on));});$('hashBtn').disabled=on||!state.rom;$('applyBtn').textContent=on?'正在處理補丁…':'開始套用補丁';render();}
+  function requestValidation(){if(!state.romInfo||!state.patchInfo||!state.rom||!state.patch||state.romError||state.patchError||state.romInfo.blocked||state.patchInfo.blocked)return;
+    state.validation=null;state.pending.verify='verify-'+(++state.seq);const manual=state.patchInfo.validation==='crc32'?'':$('manualCrc').value;
+    worker.postMessage({kind:'validate',job:state.pending.verify,rom:state.rom,patch:state.patch,info:state.patchInfo,manualCrc:manual,undo:$('undoPpf').checked});render();
+  }
+  function shouldSaveDirectly(p=state.patchInfo,v=state.validation){
+    if(!p||!state.rom)return false;
+    if($('directSave').checked)return true;
+    const size=p.type==='BPS'?p.targetSize:p.type==='UPS'?(v?.direction==='reverse'?p.sourceSize:p.targetSize):p.type==='VCDIFF'?null:(p.truncateSize??Math.max(state.rom.size,p.maxWrite||0));
+    return state.rom.size>512*1024*1024||(size!==null&&size>512*1024*1024);
+  }
+  function isReady(){const p=state.patchInfo,r=state.romInfo,v=state.validation;
+    if(!p||!r||!v||!v.ready||p.blocked||r.blocked||state.busy||!state.rom||!state.patch)return false;
+    if(v.kind==='warn'&&!$('ackRisk').checked)return false;
+    const n=currentName();if(n.toLowerCase()===state.rom.name.toLowerCase())return false;
+    const size=p.type==='BPS'?p.targetSize:p.type==='UPS'?(v.direction==='reverse'?p.sourceSize:p.targetSize):p.type==='VCDIFF'?null:(p.truncateSize??Math.max(state.rom.size,p.maxWrite||0));
+    if(p.type==='BPS'&&size>512*1024*1024)return false;
+    if(shouldSaveDirectly(p,v)&&typeof window.showSaveFilePicker!=='function')return false;
+    return true;
+  }
+  function render(){const p=state.patchInfo,r=state.romInfo,v=state.validation;
+    $('detailsGrid').hidden=!p;$('emptyInfo').hidden=!!p;$('formatTag').textContent=p?p.type:'尚未載入';
+    $('undoLabel').hidden=!(p?.type==='PPF3'&&p.undo);
+    $('manualCrc').disabled=state.busy||!p||p.validation==='crc32';
+    $('riskLabel').hidden=!(p&&v&&v.kind==='warn');
+    $('hashBtn').disabled=state.busy||!state.rom;
+    if(p){const k=p.sourceCrc==null?null:known[hex(p.sourceCrc)];$('gameName').textContent=k?.name||stem(state.patch?.name);$('gameSource').textContent=k?'依內建 No-Intro CRC32 對照辨識':'僅依補丁檔名推定，並非驗證過的遊戲識別';
+      $('platform').textContent=k?.platform||r?.platform||'尚未確定';$('patchType').textContent=p.type==='VCDIFF'?'XDELTA／VCDIFF':p.type;
+      $('expectedCrc').textContent=hex(p.sourceCrc);$('expectedSize').textContent=sizes(p.sourceSize);$('targetCrc').textContent=hex(p.targetCrc);$('targetSize').textContent=p.type==='IPS'||p.type==='IPS32'?(p.truncateSize==null?'依原始大小／補丁寫入範圍決定':sizes(p.truncateSize)):sizes(p.targetSize);
+      $('verifyMode').textContent=p.validation==='crc32'?'來源／輸出 CRC32':p.validation==='block'?'PPF 原始區塊'+(p.sourceSize!==null?'＋大小':''):'無內建 CRC32';
+      $('patchRecords').textContent=(p.entryCount==null?'格式專屬指令':p.entryCount.toLocaleString('en-US')+' 筆')+(p.undo?' · 可還原':'');
+      $('patchNote').hidden=!p.metadata;$('patchNote').textContent=p.metadata?'補丁備註：'+p.metadata:'';
+      if(p.validation==='crc32'){$('manualCrc').placeholder='BPS／UPS 已自動取得，無須輸入';}
+      else $('manualCrc').placeholder='例如 BA595897';
+    }else{$('patchNote').hidden=true;}
+    let kind='info',message='請選擇原始 ROM／ISO 與補丁檔。';
+    if(state.patchError){kind='bad';message=state.patchError;}
+    else if(state.romError){kind='bad';message=state.romError;}
+    else if(r?.blocked){kind='bad';message=r.blocked;}
+    else if(p?.blocked){kind='bad';message=p.blocked;}
+    else if(state.patch&&!p){message='正在讀取補丁格式、檢查紀錄與校驗碼…';}
+    else if(state.rom&&!r){message='正在辨識原始遊戲檔…';}
+    else if(!state.patch&&!state.rom){message='請選擇原始 ROM／ISO 與補丁檔。';}
+    else if(!state.patch||!state.rom){message='已載入其中一個檔案；請再載入另一個檔案。';}
+    else if(!v){message='正在驗證原始檔與補丁相容性…';}
+    else{kind=v.kind==='ok'?'good':v.kind;message=v.message;
+      if(v.ready&&v.kind==='warn'&&!$('ackRisk').checked)message+=' 請勾選確認後再開始。';
+      if(currentName().toLowerCase()===state.rom.name.toLowerCase()){kind='bad';message='輸出檔名不能與原始檔相同，避免意外覆蓋。請修改輸出檔名。';}
+      if(p?.type==='BPS'&&p.targetSize>512*1024*1024){kind='bad';message='BPS 輸出超過目前的 512 MiB 目標記憶體上限。';}
+      if(typeof window.showSaveFilePicker!=='function'&&shouldSaveDirectly(p,v)){kind='bad';message='此瀏覽器不支援大型檔案直接另存，請使用最新版桌面 Chrome／Edge。';}
+    }
+    if(!state.busy)setMessage(kind,message);
+    $('applyBtn').disabled=!isReady();
+    const direct=shouldSaveDirectly(p,v);
+    $('saveHint').textContent=direct?'這份檔案採「直接儲存」流程：按下開始後會開啟系統另存視窗，直接分段寫入新檔，不必將整份 ISO／BIN 載入記憶體。':'檔案會先在本機完成補丁，再點選「下載另存新的 ROM／ISO」儲存。原始檔不會被修改。';
+  }
+  worker.addEventListener('message',e=>{const m=e.data;
+    if(m.kind==='progress'){const current=[state.pending.patch,state.pending.verify,state.pending.apply,state.pending.hash];if(!current.includes(m.job))return;progress(m.message,m.percent);return;}
+    if(m.kind==='romInfo'){if(state.pending.rom!==m.job)return;state.romInfo=m.info;$('romFileDetails').textContent=sizes(m.info.size)+' · '+m.info.platform;requestValidation();render();return;}
+    if(m.kind==='patchInfo'){if(state.pending.patch!==m.job)return;state.patchInfo=m.info;$('patchFileDetails').textContent=sizes(state.patch.size)+' · '+m.info.type+(m.info.validation==='crc32'?' · 補丁 CRC32 通過':'');requestValidation();render();return;}
+    if(m.kind==='validation'){if(state.pending.verify!==m.job)return;state.validation=m.result;if(m.result.actualCrc!=null){state.romInfo.crc=m.result.actualCrc;$('romFileDetails').textContent=sizes(state.rom.size)+' · CRC32: '+hex(m.result.actualCrc)+' · '+state.romInfo.platform;}render();return;}
+    if(m.kind==='romCrc'){if(state.pending.hash!==m.job)return;state.romInfo.crc=m.crc;$('romFileDetails').textContent=sizes(state.rom.size)+' · CRC32: '+hex(m.crc)+' · '+state.romInfo.platform;setMessage('good','原始檔 CRC32 計算完成：'+hex(m.crc)+'。');return;}
+    if(m.kind==='applyResult'){if(state.pending.apply!==m.job)return;state.pending.apply='';lock(false);if(m.saved){$('resultTitle').textContent='✓ 補丁已直接另存至你選擇的本機位置';}
+      else{const blob=new Blob((m.buffers||[]).map(b=>new Uint8Array(b)),{type:'application/octet-stream'});state.url=URL.createObjectURL(blob);const a=$('downloadBtn');a.href=state.url;a.setAttribute('aria-disabled','false');a.tabIndex=0;a.download=currentName();$('resultTitle').textContent='✓ 補丁已完成，請點選下載另存新檔';}
+      $('result').classList.add('show');$('resultDetails').textContent='輸出大小：'+sizes(m.size)+(m.crc!=null?' ｜ CRC32：'+hex(m.crc):' ｜ 大型檔案未計算輸出 CRC32')+(m.headerRemoved?' ｜ 已移除 512 bytes 檔頭':'')+(m.direction==='reverse'?' ｜ UPS 反向還原':'')+(m.windows!=null?' ｜ 視窗數 '+m.windows:'');progress('處理完成',100);
+      setMessage('good',m.saved?'補丁處理成功，新檔已儲存到你選擇的位置。':'補丁處理成功，可點選右方按鈕下載另存新檔。');return;
+    }
+    if(m.kind==='error'){
+      if(m.scope==='inspectRom'){if(m.job!==state.pending.rom)return;state.romError=m.message;state.romInfo=null;$('romFileDetails').textContent='錯誤：'+m.message;}
+      else if(m.scope==='inspectPatch'){if(m.job!==state.pending.patch)return;state.patchError=m.message;state.patchInfo=null;$('patchFileDetails').textContent='錯誤：'+m.message;}
+      else if(m.scope==='validate'){if(m.job!==state.pending.verify)return;state.validation={ready:false,kind:'bad',message:m.message};}
+      else if(m.scope==='hashRom'){if(m.job!==state.pending.hash)return;}
+      else if(m.scope==='apply'){if(m.job!==state.pending.apply)return;state.pending.apply='';lock(false);}
+      render();setMessage('bad',m.message);return;
+    }
+  });
+  worker.addEventListener('error',e=>{state.busy=false;render();setMessage('bad','本機補丁工作執行緒發生錯誤：'+(e.message||'請重新開啟 HTML。'));});
+  $('hashBtn').addEventListener('click',()=>{if(!state.rom||state.busy)return;state.pending.hash='hash-'+(++state.seq);progress('計算原始檔 CRC32',0);worker.postMessage({kind:'hashRom',rom:state.rom,job:state.pending.hash});});
+  $('applyBtn').addEventListener('click',async()=>{
+    if(!isReady())return;
+    const p=state.patchInfo,v=state.validation;const direct=shouldSaveDirectly(p,v);
+    let handle=null;
+    if(direct){if(typeof window.showSaveFilePicker!=='function'){setMessage('bad','大型檔案須使用支援檔案儲存 API 的 Chrome 或 Edge。');return;}
+      try{
+        const name=currentName();
+        handle=await window.showSaveFilePicker({suggestedName:name});
+        if(handle.name.toLowerCase()===state.rom.name.toLowerCase()){setMessage('bad','輸出檔案名稱與原始檔相同，已中止以避免覆蓋原始檔。');return;}
+      }catch(e){if(e.name==='AbortError')return;setMessage('bad','無法開啟另存視窗：'+e.message+'。請使用最新版 Chrome／Edge。');return;}
+    }
+    clearResult();lock(true);state.pending.apply='apply-'+(++state.seq);progress('準備套用補丁',0);
+    setMessage('info',direct?'正在分段寫入你選擇的新檔案。請勿關閉本頁。':'正在本機套用補丁並產生新檔案。');
+    worker.postMessage({kind:'apply',job:state.pending.apply,rom:state.rom,patch:state.patch,info:state.patchInfo,handle,manualCrc:p.validation==='crc32'?'':$('manualCrc').value,undo:$('undoPpf').checked});
+  });
+  $('downloadBtn').addEventListener('click',e=>{if(!state.url){e.preventDefault();return;}$('downloadBtn').download=currentName();});
+  render();
+})();
+
+</script>
+</body></html>
